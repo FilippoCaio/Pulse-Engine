@@ -1,0 +1,60 @@
+[PASS] Riposo e sleeping - cubo fermo a y=0.4953, sleeping=1
+[PASS] Collider primitivi dedicati - probe=1/1/1; y=1.0/0.5/0.5
+[PASS] Capsula inclinata: contatto e coppia - fondo=-0.005, rotazione collisione=0.318, y=0.495
+[PASS] RigidBody dinamici: capsula-sfera - vCaps=1.97, vSfera=2.96, x=1.72/4.22
+[PASS] RigidBody dinamici: capsula-capsula - v=-1.06/1.06, x=-1.47/1.47
+[PASS] Rotolamento sfera - spin=5.495, velocita=2.720, y=0.495
+[PASS] Rotolamento cilindro sdraiato - spin asse=5.128, velocita=2.530, y=0.485
+[PASS] Cilindro inclinato: contatto sul bordo - fondo=-0.016, rotazione urto=0.385, y=0.485
+[PASS] Cono inclinato: contatto sul bordo - fondo=-0.020, rotazione urto=0.690, y=0.224
+[PASS] Restitution - apice dopo rimbalzo y=2.59
+[PASS] Collision layers - attraversa y=-16.65 (<-1), blocca y=0.50 (0.5)
+[PASS] Blueprint Trace layer detection - mask esclusa=ok, mask layer 3=ok, actor=2/2
+[PASS] Torre abbattuta - 24/28 mattoni dispersi
+[PASS] Pendulum constraints - errore max asta: 0.0000 m
+[PASS] Catena domino - 15/16 tessere cadute
+[PASS] Serializzazione .imp - 10 oggetti, roundtrip identico, Audio Source ok
+[PASS] Empty Object e ordine componenti - mesh=0, fisica=0, transform=(2,3,4), ordine=15
+[PASS] Rotazioni (X=roll Y=pitch Z=yaw) - roundtrip ok, yaw ok, pitch ok, roll ok
+[PASS] Gerarchia e prefab - cicli=ok, move/rotate/scale=ok, prefab=3 (1 radici), delete=ok
+[PASS] Blueprint runtime - roundtrip ok, impulso via grafo: vel.y=6.000 (atteso 6)
+[PASS] Blueprint v2 completo - roundtrip ok, fn: conta=10 (10), for: 3 el (3), foreach: somma=6 (6), evento: 42 (42)
+[PASS] Blueprint v3 (transform/string/set-ritorno) - roundtrip ok, transform ok, slit ok, etichetta=mondo (mondo), copia=7 (7), fisica=statica
+[PASS] Blueprint v4 (custom event param + comment) - roundtrip ok, evento(param) ok, comment 1, eco=9 (9)
+[PASS] Blueprint v5 (delegate / dispatcher) - roundtrip ok, firma + broadcast argomento: colpito=13 (13)
+[PASS] Blueprint v6 (Transform esposto = valore esplicito) - roundtrip ok, default ok, override pos=(4.0,2.0,-3.0) rot=(0.0,45.0,0.0) scala=(3.0,3.0,3.0)
+[PASS] Blueprint v7 (timer / delay latenti) - roundtrip ok, handle=1, pausa=ok, ripresa=ok, delay=ok, retrigger=ok
+[PASS] Blueprint v8 (Curve asset / Evaluate Curve) - asset=ok, path roundtrip=ok, evaluate=1 (1)
+[PASS] Blueprint v9 (Timer valid / delegate / function ref) - roundtrip=ok, vuoto=ok, attivo=ok, delegate=ok, funzione=ok, scaduto=ok
+[PASS] Blueprint v10 (funzioni pure) - roundtrip=ok, SommaPura(2,3)=5 (5)
+[PASS] Blueprint v11 (Get Component by Class) - native=2/2, Blueprint preciso=3/3, roundtrip=ok, missing=ok
+[PASS] Blueprint v12 (clip / volume live / fade / settings) - roundtrip=ok, clip=Audio\Theme Loop.ogg, volume=1.65, fade=0.75/1.25, interface=ok
+[PASS] Blueprint v13 (delegate fan-out / Create Event / Clamp / Gate / reroute) - roundtrip=ok, delegate fanout=2/2, reroute=ok, gate=ok, clamp=0.80
+[PASS] Blueprint v14 (Compare <= / >=) - roundtrip=ok, 2<=2=true, 3>=2=true, labels=ok
+[PASS] Blueprint v15 (Ctrl rewire / reroute bypass) - bypass exec/data=ok, detach=ok, reconnect=ok, roundtrip=ok
+[PASS] Blueprint v16 (Pi constant) - roundtrip=ok, shape=ok, value=3.14159274
+[PASS] Blueprint v17 (Spawn / Exposed / Enum / Construction) - asset=ok, roundtrip/path=ok, construct=ok, select/switch/spawn=ok
+[PASS] Blueprint v18 (Actor lookup by Tag / Class) - tag scene=ok, graph=ok, first/all tag=ok, class/component=ok
+[PASS] Blueprint v19 (Framework / Child inheritance) - parent=ok, runtime=ok, framework=ok, save/load=ok
+[PASS] Blueprint Interface Message - firma/roundtrip=ok, target=ok, target incompatibile=no-op ok
+[PASS] Persistent Inspector Events - multi-listener=ok, argomenti funzione/evento=ok, roundtrip=ok
+[PASS] Blueprint v20 (Overlap / Trigger shapes / Mesh delegates) - physics begin/end=ok, trigger/mesh=ok, events/delegates=ok
+[PASS] Prefab Mode / propagazione istanze - istanze=2, membri blu=6, ordine=ok, aggiornamento=ok, roundtrip=ok
+[PASS] Character statico / Set Location con collisione - sweep contro Mesh statica: x=-1.003, velocity=59.81
+[PASS] Navigation / AI Agent / Reverb / Static flags - bake/path=ok, agent=(3.88, 1.25), reverb gain=1.11, scene/nodes=ok
+[PASS] Animation / Animator / collision provider / viewport dock - clip/eventi/controller=ok, runtime/trigger=ok, colore/testo=ok, dock/reset=ok
+[PASS] Audio assets (Class / Attenuation / Concurrency) - assets=ok, scene refs=ok, gain=0.375
+[PASS] Componenti Blueprint multipli - runtime=2 istanze, override=separati, roundtrip=ok
+[PASS] Blueprint Required Components - roundtrip=ok, refs=owner, unique=no
+[PASS] Blueprint Interface signature-only - BPI pulita=ok, return protetto=ok, event/function=ok, runtime/origine=ok
+[PASS] Multi-selection highlight - highlight=2, vertici linee=48
+[PASS] Blueprint Cast To Class - native=ok, Blueprint parent=ok, failed/null=ok, roundtrip=ok
+[PASS] Blueprint Dispatcher cross-graph - bind=ok, sig refused=ok, unknown refused=ok, arg=7, listener var=ok, 2nd component=ok, bad name refused=ok, wire rule=ok
+[PASS] Widget member through a variable - class=ok, .wgt graph=ok, member=ok, handle=77, fn=AddScore, arg=5, blueprint path avoided=ok, refs=ok ok ok ok object-like=ok
+[PASS] Widget bar Min/Max range - 0..1 default=ok, 0..100 at 75=ok, get back=ok, clamp=ok, 20..40 at 30=ok, empty span=ok, roundtrip=ok
+[PASS] Widget direct Get nodes - percent=ok range=ok/ok align=ok/ok anchor=ok pivot=ok text=ok visible=ok enabled=ok opacity=ok size=ok pos=ok color=ok
+[PASS] Context Sensitive / Blueprint members - metadata=ok, asset spostato=ok, classe runtime=ok, private Inspector=ok, clipboard cross-BP=ok (Alert2), member runtime=ok, flo
+[PASS] Frustum culling camera - 1183 objects, 744 culled, 0 visible wrongly discarded
+[PASS] Riordino componenti Blueprint - [A.bp1 B.bp2 C.bp3 ] -> [B.bp2 A.bp1 C.bp3 ] -> [C.bp3 B.bp2 A.bp1 ]
+
+ALL TESTS PASSED - 0 tests failed

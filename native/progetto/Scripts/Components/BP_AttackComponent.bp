@@ -1,0 +1,47 @@
+IMPULSOBP 6
+classkind 0
+uniqueinstance 1
+var Damage 1 0 0 1 5 0 0 0
+canvas -
+node 1 ev_start 40 60 0 0 -
+canvas *ConstructionScript
+node 1 ev_construct 40 80 0 0 -
+canvas Attack
+fnpure 0
+fnmeta 0
+node 1 fn_entry 42 84 0 0 -
+node 2 trace_sphere 994 84 0 2 -
+lit 2 3 1 0 0
+node 3 self 294 182 0 0 -
+node 4 wloc 434 182 0 0 -
+node 5 m_add 826 182 0 0 -
+node 6 dir_fwd 434 266 0 0 -
+node 7 m_mul 672 266 0 0 -
+lit 7 1 2 0 0
+node 8 does_implement_interface 1260 196 0 0 Scripts\Interfaces\BPI_Damageble.bpi
+nstr 8 Scripts\Interfaces\BPI_Damageble.bpi
+node 9 l_and 1736 154 0 0 -
+node 10 reroute 1638 140 0 0 -
+node 11 l_if 1890 84 0 0 -
+node 13 interface_message 2212 56 0 0 ReceiveDamage
+nstr 13 ReceiveDamage
+slit 13 0 Scripts\Interfaces\BPI_Damageble.bpi
+node 14 var_get 2072 168 0 0 Damage
+nstr 14 Damage
+link 3 0 4 0
+link 4 0 2 1
+link 4 0 5 0
+link 3 0 6 0
+link 6 0 7 0
+link 7 0 5 1
+link 5 0 2 2
+link 2 4 8 0
+link 8 0 9 1
+link 2 1 10 0
+link 10 0 9 0
+link 9 0 11 1
+link 2 0 11 0
+link 1 0 2 0
+link 2 4 13 1
+link 11 0 13 0
+link 14 0 13 2

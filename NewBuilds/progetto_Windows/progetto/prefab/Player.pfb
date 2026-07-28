@@ -1,0 +1,92 @@
+IMPULSO 2
+entity 14
+parent 0
+name Player
+mesh 4
+scale 0.8 0.8 0.8
+color 0.75 0.6 0.9
+mat 48 0.35 0 0
+body 1 1 0.25 0.5 0.01 5 0
+pos -0.09 4.65132 0.17
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 1 0.79 0 0 0 0.449998 11.9 Audio\S_Footstep.wav
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15
+staticflags 0
+tag Player
+behavior 0 6 0 0
+comps 1 1 0
+elayer 1
+graph Scripts\SimpleCharacterMovement.bp
+dcollapse 7
+dorder 2 3 8 6 4 5 7 9 10 11
+varov CameraBobAmplitude 0.2 0 0
+varov CameraBobAmplitude_Pitch 0.2 0 0
+varov CameraBobAmplitude_Roll 0.15 0 0
+varov CameraBobFrequency 10 0 0
+varov CameraBobFrequency_Pitch 14 0 0
+varov CameraBobFrequency_Roll 8 0 0
+varov JumpSpeed 7 0 0
+varov LookSensitivity 0.05 0 0
+varov LookSmoothness 8 0 0
+varov MovementSmoothness 10 0 0
+varov MovementSpeed 0.1 0 0
+varov Physics 24 0 0
+varov SprintSpeed 0.18 0 0
+varov StepLength 3 0 0
+end
+entity 15
+parent 18
+name PlayerCamera
+mesh 0
+scale 0.4 0.4 0.4
+color 0.4 0.85 0.95
+mat 48 0.35 0 0
+body 1 1 0.25 0.5 0.01 0.05 1
+pos -0.09 5.91468 0.17
+rot 0 -0.707107 0 0.707107
+light 0 1 0.85 0.55 3 12
+camera 1 70 0
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15
+staticflags 0
+behavior 0 6 0 0
+comps 0 0 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 7 8 9 10 11
+end
+entity 18
+parent 14
+name CameraPivot
+mesh 0
+scale 0.05 0.05 0.05
+color 0.42 0.45 0.5
+mat 24 0.12 2 0
+body 1 1 0.25 0.7 0.01 0.05 1
+pos -0.09 5.91468 0.17
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15
+staticflags 0
+behavior 0 6 0 0
+comps 0 0 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 7 8 9 10 11
+end

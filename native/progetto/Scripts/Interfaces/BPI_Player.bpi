@@ -1,0 +1,9 @@
+IMPULSOBP 6
+classkind 0
+canvas -
+canvas *ConstructionScript
+node 1 ev_construct 40 80 0 0 -
+canvas Execute
+fnpure 0
+node 1 fn_entry 40 70 0 0 -
+node 2 fn_return 330 70 0 0 -

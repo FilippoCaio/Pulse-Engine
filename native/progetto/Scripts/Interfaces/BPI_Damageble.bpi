@@ -1,0 +1,8 @@
+IMPULSOBP 6
+classkind 0
+canvas -
+canvas ReceiveDamage
+fnpure 0
+fnmeta 0
+fnin Damage 1
+node 1 fn_entry 60 100 0 0 -

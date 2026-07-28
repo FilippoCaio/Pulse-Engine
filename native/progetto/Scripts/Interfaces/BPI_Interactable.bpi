@@ -1,0 +1,9 @@
+IMPULSOBP 5
+canvas -
+canvas *ConstructionScript
+node 1 ev_construct 40 80 0 0 -
+canvas Interact
+fnpure 0
+node 1 fn_entry 40 70 0 0 -
+node 2 fn_return 330 70 0 0 -
+link 1 0 2 0

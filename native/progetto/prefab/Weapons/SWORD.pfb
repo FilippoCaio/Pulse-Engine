@@ -1,0 +1,117 @@
+IMPULSO 2
+entity 47
+parent 48
+name SwordMesh
+mesh 0
+scale 1.13255 0.05 0.28
+color 0.864 0.824 0.848
+mat 48 0.35 0 0
+doublesided 0
+body 0 1 0.25 0.5 0.01 0.05 1
+pos 9.31617 1.94728 0.588122
+rot -0.0868889 -0.015066 -0.783235 0.61544
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13
+end
+entity 48
+parent 0
+name SWORD
+mesh 0
+scale 0.643495 1 1
+color 0.8 0.5 0.3
+mat 48 0.35 0 0
+doublesided 0
+body 1 1 0.3 0.5 0.01 0.05 1
+pos 9.14904 1.24047 0.701811
+rot -0.0868888 -0.0150661 -0.783235 0.615439
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+staticflags 0
+behavior 0 6 0 0
+comps 0 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13
+end
+entity 49
+parent 48
+name SwordMesh
+mesh 0
+scale 0.424707 0.11 0.09
+color 0.864 0.824 0.848
+mat 48 0.35 0 0
+doublesided 0
+body 0 1 0.25 0.5 0.01 0.05 1
+pos 9.18418 1.39065 0.672974
+rot 0.492392 0.424527 -0.615272 0.445834
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13
+end
+entity 50
+parent 48
+name SwordMesh
+mesh 0
+scale 0.257399 0.05 0.13
+color 0.864 0.824 0.848
+mat 48 0.35 0 0
+doublesided 0
+body 0 1 0.25 0.5 0.01 0.05 1
+pos 9.152 1.25337 0.698087
+rot -0.0868889 -0.015066 -0.783235 0.61544
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13
+end

@@ -1,0 +1,8 @@
+IMPULSOANIMCTRL 2
+next 5
+default 3
+parameter 2 0 "Attack"
+state 3 154 77.4001 1 0 "Animations\\EnemySwordIdle.anim" "IdleSword"
+state 4 474.4 78.1999 1 0 "Animations\\EnemyAttack_Sword.anim" "AttackSword"
+transition 4 3 0.2 1 1 0.1 0 0 ""
+transition 3 4 0.2 1 1 0.1 5 0 "Attack"

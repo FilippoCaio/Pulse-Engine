@@ -1,0 +1,949 @@
+IMPULSOBP 6
+classkind 0
+uniqueinstance 1
+var LookSensitivity 1 0 0 1 0.1 0 0 0
+var LookSmoothness 1 0 0 1 3 0 0 0
+var MovementSmoothness 1 0 0 1 0 0 0 0
+var MovementSpeed 1 0 0 1 0.3 0 0 0
+var SprintSpeed 1 0 0 1 0.35 0 0 0
+var JumpSpeed 1 0 0 1 0 0 0 0
+var CameraBobAmplitude_Roll 1 0 0 1 0.05 0 0 0
+var CameraBobFrequency_Roll 1 0 0 1 5 0 0 0
+var CameraBobFrequency_Pitch 1 0 0 1 5 0 0 0
+var CameraBobAmplitude_Pitch 1 0 0 1 1 0 0 0
+var StepLength 1 0 0 1 0.5 0 0 0
+var FootstepsMinCheck 1 0 0 1 0.15 0 0 0
+var LocalCam 4 0 2 0 0 0 0 0
+var LookX_Target 1 0 2 0 0 0 0 0
+var LookY_Target 1 0 2 0 0 0 0 0
+var LookY_Current 1 0 2 0 0 0 0 0
+var LookX_Current 1 0 2 0 0 0 0 0
+var MovementX_Target 1 0 2 0 0 0 0 0
+var MovementX_Current 1 0 2 0 0 0 0 0
+var MovementY_Target 1 0 2 0 0 0 0 0
+var MovementY_Current 1 0 2 0 0 0 0 0
+var IsGrounded? 3 0 2 0 0 0 0 0
+var Falling 3 0 2 0 0 0 0 0
+var VelocityY 1 0 2 0 0 0 0 0
+var PositionY 1 0 2 0 0 0 0 0
+var Jumping 3 0 2 0 0 0 0 0
+var CameraBobValue_Roll 1 0 2 0 0 0 0 0
+var BobPhase_Roll 1 0 2 0 0 0 0 0
+var PrevPlayerPos 2 0 2 0 0 0 0 0
+var CurrentPlayerPos 2 0 2 0 0 0 0 0
+var DeltaTime 1 0 2 0 0 0 0 0
+var CurrentCamBob_Roll 1 0 2 0 0 0 0 0
+var CamBobPhaseOffset 2 0 2 0 0 0 0 0
+var BobPhase_Pitch 1 0 2 0 0 0 0 0
+var CameraBobValue_Pitch 1 0 2 0 0 0 0 0
+var CurrentCamBob_Pitch 1 0 2 0 0 0 0 0
+var IsSprinting? 3 0 2 0 0 0 0 0
+var CurrentMovementSpeed 1 0 2 0 0 0 0 0
+var CurrentSmoothnessSpedCam_Pitch 1 0 2 0 0 0 0 0
+var FootstepsSource 4 0 2 0 0 0 0 0
+vclass FootstepsSource component:AudioSource
+var FootstepProgress 1 0 2 0 0 0 0 0
+var CurrentCamFrequency_Roll 1 0 2 0 0 0 0 0
+var CurrentCamFrequency_Pitch 1 0 2 0 0 0 0 0
+var HUD 16 0 2 0 0 0 0 0
+vclass HUD widget:UI\NuovoWidget.wgt
+var HealthComponent 4 0 2 0 0 0 0 0
+vclass HealthComponent blueprint:Scripts\Components\BP_HealthComponent.bp
+event 
+eventmeta 0
+event nom
+eventmeta 0
+event no
+eventmeta 0
+event n
+eventmeta 0
+event C
+eventmeta 0
+event Ca
+eventmeta 0
+event Caz
+eventmeta 0
+event Cazz
+eventmeta 0
+event Cazzo
+eventmeta 0
+event a
+eventmeta 0
+event aw
+eventmeta 0
+event awd
+eventmeta 0
+event Cam
+eventmeta 0
+event Came
+eventmeta 0
+event Camer
+eventmeta 0
+event Camera
+eventmeta 0
+event CameraB
+eventmeta 0
+event CameraBo
+eventmeta 0
+event CameraBob
+eventmeta 0
+event CameraBobb
+eventmeta 0
+event CameraBobbi
+eventmeta 0
+event CameraBobbin
+eventmeta 0
+event CameraBobbing
+eventmeta 0
+event F
+eventmeta 0
+event Fo
+eventmeta 0
+event Foo
+eventmeta 0
+event Foot
+eventmeta 0
+event Foots
+eventmeta 0
+event Footst
+eventmeta 0
+event Footste
+eventmeta 0
+event Footstep
+eventmeta 0
+event Footsteps
+eventmeta 0
+event Footstepp
+eventmeta 0
+event Footsteppe
+eventmeta 0
+event Footstepper
+eventmeta 0
+event Footstepper_
+eventmeta 0
+event Footstepper_2
+eventmeta 0
+event Footstepper_3
+eventmeta 0
+event PlayFootstep
+eventmeta 0
+event HealthBarUpdate
+eventmeta 0
+evpin CurrentHealth 1
+event OnDamage_Event
+eventmeta 0
+evpin CurrentHealth 1
+event HealthBarUpdate2
+eventmeta 0
+evpin CurrentHealth 1
+event HealthBarUpdate3
+eventmeta 0
+evpin CurrentHealth 1
+event HealthBarUpdate1
+eventmeta 0
+evpin CurrentHealth 1
+event HealthBarUpdate4
+eventmeta 0
+evpin CurrentHealth 1
+event HealthBarUpdateHealthBarUpdate
+eventmeta 0
+evpin CurrentHealth 1
+canvas -
+node 11 ev_tick 28 -406 0 0 -
+node 63 get_comp 1499.85 -1076.27 0 0 -
+node 64 l_if 1806 -1162 0 0 -
+node 65 ev_start 28 -1372 0 0 -
+node 66 var_set 2031.85 -1160.27 0 0 LocalCam
+nstr 66 LocalCam
+node 74 var_set 1736 98 0 0 LookX_Target
+nstr 74 LookX_Target
+node 75 var_set 2534 280 0 0 LookY_Target
+nstr 75 LookY_Target
+node 96 ev_axis 28 -168 0 3 -
+node 97 ev_axis 28 -42 0 4 -
+node 100 ev_key 28 98 0 45 -
+node 101 break_v2 756 154 0 0 -
+node 102 m_mul 532 154 0 0 -
+node 103 var_get 308 210 0 0 LookSensitivity
+nstr 103 LookSensitivity
+node 149 var_get 1358 154 0 0 LookX_Target
+nstr 149 LookX_Target
+node 150 var_get 1474.16 361.32 0 0 LookY_Target
+nstr 150 LookY_Target
+node 152 flow_seq 1120 98 0 2 -
+node 153 reroute 1092 210 0 0 -
+node 154 reroute 1484 210 0 0 -
+node 155 reroute_ex 1400 308 0 0 -
+node 157 reroute 1092 406 0 0 -
+node 158 reroute 1596 406 0 0 -
+node 161 m_sub 1568 154 0 0 -
+node 162 m_add 1680 336 0 0 -
+node 163 reroute 1905.85 -1034.27 0 0 -
+node 170 call_func 882 -420 0 0 Look
+nstr 170 Look
+node 171 call_func 1106 -420 0 0 Move
+nstr 171 Move
+node 172 var_set 224 -28 0 0 MovementY_Target
+nstr 172 MovementY_Target
+node 173 var_set 224 -154 0 0 MovementX_Target
+nstr 173 MovementX_Target
+node 178 ev_key 28 644 0 0 -
+node 181 call_func 406 -420 0 0 GroundCheck
+nstr 181 GroundCheck
+node 182 var_set 1232 658 0 0 VelocityY
+nstr 182 VelocityY
+node 183 var_get 434 728 0 0 IsGrounded?
+nstr 183 IsGrounded?
+node 184 l_if 840 658 0 0 -
+node 185 var_get 1078 714 0 0 JumpSpeed
+nstr 185 JumpSpeed
+node 187 l_and 630 714 0 0 -
+node 188 var_get 308 784 0 0 Jumping
+nstr 188 Jumping
+node 189 l_not 434 770 0 0 -
+node 190 var_set 1456 658 0 0 Jumping
+nstr 190 Jumping
+lit 190 1 1 0 0
+node 192 var_set 1666 658 0 0 IsGrounded?
+nstr 192 IsGrounded?
+node 205 l_cmp 1918 336 0 1 -
+lit 205 1 89 0 0
+node 206 l_and 2114 336 0 0 -
+node 207 l_if 2296 280 0 0 -
+node 208 l_cmp 1918 434 0 0 -
+lit 208 1 -89 0 0
+node 209 reroute 1918 238 0 0 -
+node 255 var_set 210 -406 0 0 DeltaTime
+nstr 255 DeltaTime
+node 306 call_func 630 -420 0 0 CameraBobbing
+nstr 306 CameraBobbing
+node 307 ev_key 28 1008 0 41 -
+node 308 var_set 308 1036 0 0 IsSprinting?
+nstr 308 IsSprinting?
+lit 308 1 1 0 0
+node 309 var_set 308 1134 0 0 IsSprinting?
+nstr 309 IsSprinting?
+node 310 var_set 448 -1372 0 0 CurrentMovementSpeed
+nstr 310 CurrentMovementSpeed
+node 311 var_get 224 -1316 0 0 MovementSpeed
+nstr 311 MovementSpeed
+node 312 var_set 700 1036 0 0 CurrentMovementSpeed
+nstr 312 CurrentMovementSpeed
+node 313 var_get 518 1092 0 0 SprintSpeed
+nstr 313 SprintSpeed
+node 314 var_set 700 1134 0 0 CurrentMovementSpeed
+nstr 314 CurrentMovementSpeed
+node 315 var_get 518 1190 0 0 MovementSpeed
+nstr 315 MovementSpeed
+node 318 var_set 2268 658 0 0 CameraBobValue_Pitch
+nstr 318 CameraBobValue_Pitch
+lit 318 1 -20 0 0
+node 320 var_set 2842 658 0 0 CameraBobValue_Pitch
+nstr 320 CameraBobValue_Pitch
+lit 320 1 15 0 0
+node 321 var_set 1890 658 0 0 CurrentSmoothnessSpedCam_Pitch
+nstr 321 CurrentSmoothnessSpedCam_Pitch
+lit 321 1 10 0 0
+node 322 var_set 3122 658 0 0 CurrentSmoothnessSpedCam_Pitch
+nstr 322 CurrentSmoothnessSpedCam_Pitch
+lit 322 1 1 0 0
+node 323 flow_delay 3500 658 0 0 -
+lit 323 1 0.25 0 0
+node 324 var_set 3724 658 0 0 CameraBobValue_Pitch
+nstr 324 CameraBobValue_Pitch
+node 325 flow_delay 2562 658 0 0 -
+lit 325 1 0.2 0 0
+node 326 get_comp 1498 -1316 0 4 -
+node 327 var_set 2031.85 -1370.27 0 0 FootstepsSource
+nstr 327 FootstepsSource
+node 329 l_if 1807.85 -1370.27 0 0 -
+node 330 flow_seq 770 -1372 0 5 -
+node 331 reroute_ex 1190 -1134 0 0 -
+node 332 reroute 1905.85 -1272.27 0 0 -
+node 333 self 1499.85 -1202.27 0 0 -
+node 357 ev_custom 56 1694 0 0 Footstepper
+nstr 357 Footstepper
+node 358 call_func 308 1666 0 0 Get_PlayerVelocityNormalized
+nstr 358 Get_PlayerVelocityNormalized
+node 359 var_get 308 1764 0 0 DeltaTime
+nstr 359 DeltaTime
+node 360 l_cmp 728 1750 0 0 -
+lit 360 1 0.01 0 0
+node 361 l_if 1232 1694 0 0 -
+node 362 l_and 1064 1764 0 0 -
+node 363 var_get 882 1820 0 0 IsGrounded?
+nstr 363 IsGrounded?
+node 395 var_get 294 2254 0 0 FootstepsSource
+nstr 395 FootstepsSource
+node 396 audio_play 518 2198 0 0 -
+node 397 ev_custom 56 2198 0 0 PlayFootstep
+nstr 397 PlayFootstep
+node 398 reroute 2394 238 0 0 -
+node 399 var_get 476 1834 0 0 FootstepsMinCheck
+nstr 399 FootstepsMinCheck
+node 400 var_set 1442 1820 0 0 FootstepProgress
+nstr 400 FootstepProgress
+node 401 var_set 2842 1694 0 0 FootstepProgress
+nstr 401 FootstepProgress
+node 402 m_add 2688 1750 0 0 -
+node 403 var_get 2450 1834 0 0 FootstepProgress
+nstr 403 FootstepProgress
+node 404 l_cmp 3150 1764 0 4 -
+node 405 var_get 2982 1834 0 0 StepLength
+nstr 405 StepLength
+node 406 m_mul 2450 1750 0 0 -
+node 407 var_get 2282 1806 0 0 DeltaTime
+nstr 407 DeltaTime
+node 408 l_if 3360 1694 0 0 -
+node 409 var_set 3976 1694 0 0 FootstepProgress
+nstr 409 FootstepProgress
+node 410 var_get 3585.88 1768.82 0 0 FootstepProgress
+nstr 410 FootstepProgress
+node 411 m_sub 3808 1750 0 0 -
+node 412 var_get 3640 1806 0 0 StepLength
+nstr 412 StepLength
+node 413 call_event 4256 1666 0 0 PlayFootstep
+nstr 413 PlayFootstep
+node 414 call_event 1302 -420 0 0 Footstepper
+nstr 414 Footstepper
+node 415 call_func 1820 1764 0 0 Get_PlayerVel
+nstr 415 Get_PlayerVel
+node 416 reroute 2226 1778 0 0 -
+node 418 m_div 2058 1764 0 0 -
+lit 418 1 0.0167 0 0
+node 419 add_widget_viewport 1975.85 -656.27 0 0 -
+node 420 create_widget 1512 -672 0 0 UI\NuovoWidget.wgt
+nstr 420 UI\NuovoWidget.wgt
+node 421 reroute_ex 1190 -616 0 0 -
+node 422 var_set 1821.85 -656.27 0 0 HUD
+nstr 422 HUD
+node 423 get_comp 1498 -882 0 6 -
+slit 423 0 Scripts\Components\BP_HealthComponent.bp
+node 424 l_if 1792 -952 0 0 -
+node 425 var_set 2016 -952 0 0 HealthComponent
+nstr 425 HealthComponent
+node 426 reroute_ex 1204 -924 0 0 -
+node 431 var_get 308 -896 0 0 HealthComponent
+nstr 431 HealthComponent
+node 433 var_get 644 -742 0 0 HUD
+nstr 433 HUD
+node 435 member_access 798 -840 0 4 SetHealthBar
+nstr 435 SetHealthBar
+slit 435 0 widget:UI\NuovoWidget.wgt
+node 436 bind_ev 532 -994 0 0 OnDamage
+nstr 436 OnDamage
+node 438 ev_custom 518 -826 0 0 OnDamage_Event
+nstr 438 OnDamage_Event
+node 439 ev_custom 1056.58 -921.879 0 0 HealthBarUpdate2
+nstr 439 HealthBarUpdate2
+node 440 ev_custom 1047.38 -944.679 0 0 HealthBarUpdate3
+nstr 440 HealthBarUpdate3
+node 441 ev_custom 1233.8 -946.245 0 0 HealthBarUpdate1
+nstr 441 HealthBarUpdate1
+link 63 1 64 1
+link 103 0 102 1
+link 102 0 101 0
+link 100 0 152 0
+link 101 0 153 0
+link 152 1 155 0
+link 101 1 157 0
+link 149 0 161 0
+link 154 0 161 1
+link 150 0 162 0
+link 63 0 163 0
+link 163 0 66 1
+link 170 0 171 0
+link 97 0 172 0
+link 97 1 172 1
+link 96 0 173 0
+link 96 1 173 1
+link 64 0 66 0
+link 158 0 162 1
+link 185 0 182 1
+link 183 0 187 0
+link 187 0 184 1
+link 188 0 189 0
+link 189 0 187 1
+link 182 0 190 0
+link 190 0 192 0
+link 205 0 206 0
+link 206 0 207 1
+link 208 0 206 1
+link 162 0 205 0
+link 162 0 208 0
+link 207 0 75 0
+link 155 0 207 0
+link 162 0 209 0
+link 161 0 74 1
+link 152 0 74 0
+link 11 0 255 0
+link 11 1 255 1
+link 306 0 170 0
+link 307 1 308 0
+link 307 2 309 0
+link 65 0 310 0
+link 311 0 310 1
+link 308 0 312 0
+link 309 0 314 0
+link 313 0 312 1
+link 315 0 314 1
+link 192 0 321 0
+link 321 0 318 0
+link 318 0 325 0
+link 325 0 320 0
+link 320 0 322 0
+link 322 0 323 0
+link 323 0 324 0
+link 100 3 102 0
+link 329 0 327 0
+link 326 1 329 1
+link 330 0 329 0
+link 330 1 331 0
+link 331 0 64 0
+link 326 0 332 0
+link 332 0 327 1
+link 333 0 63 0
+link 333 0 326 0
+link 359 0 358 1
+link 358 1 360 0
+link 358 0 361 0
+link 362 0 361 1
+link 363 0 362 1
+link 360 0 362 0
+link 310 0 330 0
+link 395 0 396 1
+link 157 0 158 0
+link 153 0 154 0
+link 209 0 398 0
+link 398 0 75 1
+link 399 0 360 1
+link 357 0 358 0
+link 361 1 400 0
+link 402 0 401 1
+link 403 0 402 1
+link 401 1 404 0
+link 405 0 404 1
+link 406 0 402 0
+link 407 0 406 1
+link 401 0 408 0
+link 404 0 408 1
+link 408 0 409 0
+link 410 0 411 0
+link 412 0 411 1
+link 411 0 409 1
+link 409 0 413 0
+link 416 0 406 0
+link 361 0 401 0
+link 415 0 418 0
+link 418 0 416 0
+link 397 0 396 0
+link 178 1 184 0
+link 184 0 182 0
+link 171 0 414 0
+link 255 0 181 0
+link 181 0 306 0
+link 421 0 420 0
+link 420 0 422 0
+link 420 1 422 1
+link 422 1 419 1
+link 422 0 419 0
+link 330 3 421 0
+link 423 1 424 1
+link 424 0 425 0
+link 423 0 425 1
+link 333 0 423 0
+link 330 2 426 0
+link 426 0 424 0
+link 433 0 435 1
+link 431 0 436 2
+link 330 4 436 0
+link 438 2 436 1
+link 438 1 435 2
+link 438 0 435 0
+comment -42 -1484 2675.43 991.135 1 0 0.304 2.66 BEGIN PLAY
+canvas *ConstructionScript
+node 1 ev_construct 40 80 0 0 -
+canvas Look
+fnpure 0
+fnmeta 0
+node 1 fn_entry 14 84 0 0 -
+node 2 var_get 2478 126 0 0 LocalCam
+nstr 2 LocalCam
+node 3 set_lrot 2618 84 0 0 -
+node 4 val_vec 2002 168 0 0 -
+node 27 var_get 1810.1 205.248 0 0 LookY_Current
+nstr 27 LookY_Current
+node 28 var_get 3388 252 0 0 LookX_Current
+nstr 28 LookX_Current
+node 29 self 3794 182 0 0 -
+node 30 set_wrot 3794 84 0 0 -
+node 31 val_vec 3598 154 0 0 -
+node 32 self 2939.35 153.104 0 0 -
+node 33 wrot 3085.75 153.104 0 0 -
+node 34 break_v3 3299.35 153.104 0 0 -
+node 35 m_finterp 462 154 0 0 -
+lit 35 3 5 0 0
+node 38 var_get 210 294 0 0 MovementSmoothness
+nstr 38 MovementSmoothness
+node 39 m_finterp 1302 154 0 0 -
+lit 39 3 5 0 0
+node 40 var_get 1050 294 0 0 MovementSmoothness
+nstr 40 MovementSmoothness
+node 42 var_get 1050 210 0 0 LookY_Target
+nstr 42 LookY_Target
+node 43 var_get 1050 168 0 0 LookY_Current
+nstr 43 LookY_Current
+node 44 var_get 210 210 0 0 LookX_Target
+nstr 44 LookX_Target
+node 45 var_get 210 168 0 0 LookX_Current
+nstr 45 LookX_Current
+node 46 var_set 728 84 0 0 LookX_Current
+nstr 46 LookX_Current
+node 47 var_set 1568 84 0 0 LookY_Current
+nstr 47 LookY_Current
+node 48 m_add 2450 168 0 0 -
+node 53 var_get 2184 224 0 0 CamBobPhaseOffset
+nstr 53 CamBobPhaseOffset
+node 54 var_get 210 252 0 0 DeltaTime
+nstr 54 DeltaTime
+node 55 var_get 1050 252 0 0 DeltaTime
+nstr 55 DeltaTime
+link 2 0 3 1
+link 27 0 4 1
+link 29 0 30 1
+link 3 0 30 0
+link 32 0 33 0
+link 33 0 34 0
+link 34 0 31 0
+link 34 1 31 1
+link 28 0 31 2
+link 38 0 35 3
+link 40 0 39 3
+link 45 0 35 0
+link 44 0 35 1
+link 43 0 39 0
+link 42 0 39 1
+link 35 0 46 1
+link 46 0 47 0
+link 39 0 47 1
+link 1 0 46 0
+link 47 0 3 0
+link 53 0 48 1
+link 31 0 30 2
+link 4 0 48 0
+link 48 0 3 2
+link 54 0 35 2
+link 55 0 39 2
+canvas Move
+fnpure 0
+fnmeta 0
+node 1 fn_entry -602 84 0 0 -
+node 29 self 3402 182 0 0 -
+node 32 self 2793.07 168.244 0 0 -
+node 44 wloc 2954 168 0 0 -
+node 45 m_add 3192 168 0 0 -
+node 46 set_wloc 3402 84 0 0 -
+node 48 var_get 2058 140 0 0 MovementY_Current
+nstr 48 MovementY_Current
+node 49 var_get 2058 252 0 0 MovementX_Current
+nstr 49 MovementX_Current
+node 50 m_mul 2310 140 0 0 -
+node 51 self 1904 182 0 0 -
+node 52 dir_fwd 2058 182 0 0 -
+node 53 m_add 2506 140 0 0 -
+node 54 self 1904 294 0 0 -
+node 55 dir_right 2058 294 0 0 -
+node 56 m_mul 2310 224 0 0 -
+node 57 m_mul 2996 238 0 0 -
+node 61 m_finterp 560 140 0 0 -
+lit 61 3 5 0 0
+node 62 var_set 798 84 0 0 MovementX_Current
+nstr 62 MovementX_Current
+node 63 var_set 1596 84 0 0 MovementY_Current
+nstr 63 MovementY_Current
+node 64 var_get 294 280 0 0 MovementSmoothness
+nstr 64 MovementSmoothness
+node 65 m_finterp 1358 140 0 0 -
+lit 65 3 5 0 0
+node 66 var_get 1092 280 0 0 MovementSmoothness
+nstr 66 MovementSmoothness
+node 68 var_get 1092 196 0 0 MovementY_Target
+nstr 68 MovementY_Target
+node 69 var_get 1092 154 0 0 MovementY_Current
+nstr 69 MovementY_Current
+node 70 var_get 294 196 0 0 MovementX_Target
+nstr 70 MovementX_Target
+node 71 var_get 294 154 0 0 MovementX_Current
+nstr 71 MovementX_Current
+node 73 var_set 0 84 0 0 PrevPlayerPos
+nstr 73 PrevPlayerPos
+node 77 var_set 3836 84 0 0 CurrentPlayerPos
+nstr 77 CurrentPlayerPos
+node 79 self -398.559 137.28 0 0 -
+node 80 wloc -238 140 0 0 -
+node 81 wloc 3556 182 0 0 -
+node 82 var_get 294 238 0 0 DeltaTime
+nstr 82 DeltaTime
+node 83 var_get 1092 238 0 0 DeltaTime
+nstr 83 DeltaTime
+node 84 reroute 2716 252 0 0 -
+node 85 reroute 2926 252 0 0 -
+node 86 var_get 2716 294 0 0 CurrentMovementSpeed
+nstr 86 CurrentMovementSpeed
+link 32 0 44 0
+link 44 0 45 0
+link 29 0 46 1
+link 48 0 50 0
+link 51 0 52 0
+link 52 0 50 1
+link 50 0 53 0
+link 54 0 55 0
+link 49 0 56 0
+link 55 0 56 1
+link 56 0 53 1
+link 57 0 45 1
+link 64 0 61 3
+link 66 0 65 3
+link 61 0 62 1
+link 62 0 63 0
+link 65 0 63 1
+link 71 0 61 0
+link 70 0 61 1
+link 69 0 65 0
+link 68 0 65 1
+link 1 0 73 0
+link 73 0 62 0
+link 79 0 80 0
+link 80 0 73 1
+link 45 0 46 2
+link 29 0 81 0
+link 81 0 77 1
+link 46 0 77 0
+link 63 0 46 0
+link 82 0 61 2
+link 83 0 65 2
+link 53 0 84 0
+link 84 0 85 0
+link 85 0 57 0
+link 86 0 57 1
+canvas GroundCheck
+fnpure 0
+fnmeta 0
+node 1 fn_entry -168 84 0 0 -
+node 2 self 840 224 0 0 -
+node 3 trace_line 2016 84 0 9 -
+lit 3 3 3 0 0
+node 4 wloc 980 224 0 0 -
+node 5 break_v3 1204 280 0 0 -
+node 6 m_sub 1470 294 0 0 -
+lit 6 1 2.2 0 0
+node 7 m_add 1820 224 0 0 -
+node 8 val_vec 1652 280 0 0 -
+node 18 self 1624 140 0 0 -
+node 19 wloc 1764 140 0 0 -
+node 24 self 4830 308 0 0 -
+node 25 set_wloc 5936 224 0 0 -
+node 26 wloc 4984 308 0 0 -
+node 27 break_v3 5194 308 0 0 -
+node 28 self 5936 322 0 0 -
+node 29 val_vec 5754 308 0 0 -
+node 31 m_mul 3514 308 0 0 -
+lit 31 1 -9.81 0 0
+node 34 var_set 4018 224 0 0 VelocityY
+nstr 34 VelocityY
+node 35 var_set 4606 224 0 0 PositionY
+nstr 35 PositionY
+node 36 var_get 4228 322 0 0 VelocityY
+nstr 36 VelocityY
+node 37 m_mul 4396 308 0 0 -
+lit 37 1 -9.81 0 0
+node 39 m_add 5544 392 0 0 -
+node 40 var_get 5390 434 0 0 PositionY
+nstr 40 PositionY
+node 52 m_add 3836 308 0 0 -
+node 53 var_get 3682 364 0 0 VelocityY
+nstr 53 VelocityY
+node 54 l_if 2702 84 0 0 -
+node 57 var_set 3010 84 0 0 IsGrounded?
+nstr 57 IsGrounded?
+lit 57 1 1 0 0
+node 58 var_set 3234 84 0 0 VelocityY
+nstr 58 VelocityY
+node 59 var_set 3010 224 0 0 IsGrounded?
+nstr 59 IsGrounded?
+node 60 l_and 2534 140 0 0 -
+node 61 var_get 2212 224 0 0 VelocityY
+nstr 61 VelocityY
+node 62 l_cmp 2366 182 0 3 -
+node 65 l_if 3976 84 0 0 -
+node 66 var_get 3808 140 0 0 Jumping
+nstr 66 Jumping
+node 67 var_set 4214 84 0 0 Jumping
+nstr 67 Jumping
+node 68 var_get 3346 322 0 0 DeltaTime
+nstr 68 DeltaTime
+node 69 var_get 4228 364 0 0 DeltaTime
+nstr 69 DeltaTime
+node 70 flow_seq 84 84 0 2 -
+node 71 l_if 1358 462 0 0 -
+node 72 var_get 532 658 0 0 PrevPlayerPos
+nstr 72 PrevPlayerPos
+node 73 var_get 532 560 0 0 CurrentPlayerPos
+nstr 73 CurrentPlayerPos
+node 74 break_v3 756 630 0 0 -
+node 75 break_v3 756 532 0 0 -
+node 77 l_cmp 1092 532 0 0 -
+node 78 reroute_ex 546 476 0 0 -
+node 79 var_set 1624 462 0 0 Falling
+nstr 79 Falling
+node 80 var_set 1624 546 0 0 Falling
+nstr 80 Falling
+lit 80 1 1 0 0
+node 81 var_set 3430 84 0 0 CurrentSmoothnessSpedCam_Pitch
+nstr 81 CurrentSmoothnessSpedCam_Pitch
+lit 81 1 20 0 0
+link 2 0 4 0
+link 4 0 5 0
+link 4 0 7 0
+link 8 0 7 1
+link 7 0 3 2
+link 18 0 19 0
+link 19 0 3 1
+link 5 1 6 0
+link 6 0 8 1
+link 24 0 26 0
+link 26 0 27 0
+link 28 0 25 1
+link 29 0 25 2
+link 27 0 29 0
+link 27 2 29 2
+link 34 0 35 0
+link 36 0 37 0
+link 37 0 35 1
+link 27 1 39 0
+link 39 0 29 1
+link 35 0 25 0
+link 31 0 52 0
+link 52 0 34 1
+link 53 0 52 1
+link 40 0 39 1
+link 54 0 57 0
+link 57 0 58 0
+link 54 1 59 0
+link 59 0 34 0
+link 3 1 60 0
+link 60 0 54 1
+link 61 0 62 0
+link 66 0 65 1
+link 65 0 67 0
+link 68 0 31 0
+link 69 0 37 1
+link 1 0 70 0
+link 70 0 3 0
+link 72 0 74 0
+link 73 0 75 0
+link 75 1 77 0
+link 74 1 77 1
+link 77 0 71 1
+link 70 1 78 0
+link 78 0 71 0
+link 71 0 79 0
+link 71 1 80 0
+link 58 0 81 0
+link 81 0 65 0
+link 62 0 60 1
+link 3 0 54 0
+canvas CameraBobbing
+fnpure 0
+fnmeta 0
+node 1 fn_entry 42 84 0 0 -
+node 2 var_set 3654 84 0 0 CameraBobValue_Roll
+nstr 2 CameraBobValue_Roll
+node 3 var_get 2478 140 0 0 BobPhase_Roll
+nstr 3 BobPhase_Roll
+node 4 var_set 2898 84 0 0 BobPhase_Roll
+nstr 4 BobPhase_Roll
+node 5 m_add 2702 140 0 0 -
+node 6 m_mul 2310 140 0 0 -
+node 7 var_get 2030 182 0 0 CameraBobFrequency_Roll
+nstr 7 CameraBobFrequency_Roll
+node 8 m_mul 3430 168 0 0 -
+lit 8 1 6.28 0 0
+node 9 reroute 2478 182 0 0 -
+node 10 m_sin 2898 168 0 0 -
+node 11 m_mul 3108 168 0 0 -
+node 12 var_get 3108 280 0 0 CameraBobAmplitude_Roll
+nstr 12 CameraBobAmplitude_Roll
+node 13 l_if 1792 84 0 0 -
+node 14 call_func 770 70 0 0 Get_PlayerVelocityNormalized
+nstr 14 Get_PlayerVelocityNormalized
+node 15 var_get 616 140 0 0 DeltaTime
+nstr 15 DeltaTime
+node 16 l_cmp 1176 140 0 0 -
+lit 16 1 0.01 0 0
+node 17 reroute 2996 252 0 0 -
+node 18 reroute 1148 252 0 0 -
+node 19 var_get 2058 140 0 0 DeltaTime
+nstr 19 DeltaTime
+node 20 var_set 2030 294 0 0 CameraBobValue_Roll
+nstr 20 CameraBobValue_Roll
+node 21 m_finterp 924 462 0 0 -
+lit 21 3 20 0 0
+node 22 flow_seq 266 84 0 2 -
+node 23 var_get 686 504 0 0 CameraBobValue_Roll
+nstr 23 CameraBobValue_Roll
+node 24 var_get 686 462 0 0 CurrentCamBob_Roll
+nstr 24 CurrentCamBob_Roll
+node 25 var_set 1148 406 0 0 CurrentCamBob_Roll
+nstr 25 CurrentCamBob_Roll
+node 26 reroute_ex 644 420 0 0 -
+node 27 var_get 686 546 0 0 DeltaTime
+nstr 27 DeltaTime
+node 28 val_vec 2478 462 0 0 -
+node 29 var_get 2226 476 0 0 CurrentCamBob_Roll
+nstr 29 CurrentCamBob_Roll
+node 30 var_set 2660 406 0 0 CamBobPhaseOffset
+nstr 30 CamBobPhaseOffset
+node 31 m_finterp 1694 462 0 0 -
+lit 31 3 10 0 0
+node 32 var_get 1428 504 0 0 CameraBobValue_Pitch
+nstr 32 CameraBobValue_Pitch
+node 33 var_get 1428 462 0 0 CurrentCamBob_Pitch
+nstr 33 CurrentCamBob_Pitch
+node 34 var_set 1960 406 0 0 CurrentCamBob_Pitch
+nstr 34 CurrentCamBob_Pitch
+node 35 var_get 1428 546 0 0 DeltaTime
+nstr 35 DeltaTime
+node 37 var_set 5558 84 0 0 CameraBobValue_Pitch
+nstr 37 CameraBobValue_Pitch
+node 38 var_get 4452 140 0 0 BobPhase_Pitch
+nstr 38 BobPhase_Pitch
+node 39 var_set 4872 84 0 0 BobPhase_Pitch
+nstr 39 BobPhase_Pitch
+node 40 m_add 4676 140 0 0 -
+node 41 m_mul 4284 140 0 0 -
+node 42 var_get 3976 182 0 0 CameraBobFrequency_Pitch
+nstr 42 CameraBobFrequency_Pitch
+node 43 m_mul 5376 168 0 0 -
+lit 43 1 6.28 0 0
+node 44 reroute 4452 182 0 0 -
+node 45 m_sin 4872 168 0 0 -
+node 46 m_mul 5082 168 0 0 -
+node 47 var_get 5082 252 0 0 CameraBobAmplitude_Pitch
+nstr 47 CameraBobAmplitude_Pitch
+node 48 reroute 4970 252 0 0 -
+node 49 var_get 4032 140 0 0 DeltaTime
+nstr 49 DeltaTime
+node 50 var_get 2226 518 0 0 CurrentCamBob_Pitch
+nstr 50 CurrentCamBob_Pitch
+node 51 l_and 1624 154 0 0 -
+node 52 var_get 1456 182 0 0 IsGrounded?
+nstr 52 IsGrounded?
+node 54 reroute 1442 140 0 0 -
+node 55 reroute 1568 140 0 0 -
+node 62 var_get 1428 588 0 0 CurrentSmoothnessSpedCam_Pitch
+nstr 62 CurrentSmoothnessSpedCam_Pitch
+link 3 0 5 0
+link 5 0 4 1
+link 7 0 6 1
+link 9 0 5 1
+link 5 0 10 0
+link 10 0 11 0
+link 12 0 8 1
+link 6 0 9 0
+link 11 0 8 0
+link 8 0 2 1
+link 13 0 4 0
+link 4 0 2 0
+link 15 0 14 1
+link 14 0 13 0
+link 14 1 16 0
+link 17 0 11 1
+link 14 1 18 0
+link 19 0 6 0
+link 22 0 14 0
+link 23 0 21 1
+link 24 0 21 0
+link 21 0 25 1
+link 27 0 21 2
+link 29 0 28 0
+link 28 0 30 1
+link 26 0 25 0
+link 32 0 31 1
+link 33 0 31 0
+link 31 0 34 1
+link 35 0 31 2
+link 25 0 34 0
+link 34 0 30 0
+link 38 0 40 0
+link 40 0 39 1
+link 42 0 41 1
+link 44 0 40 1
+link 40 0 45 0
+link 45 0 46 0
+link 47 0 43 1
+link 41 0 44 0
+link 46 0 43 0
+link 43 0 37 1
+link 39 0 37 0
+link 48 0 46 1
+link 49 0 41 0
+link 2 0 39 0
+link 17 0 48 0
+link 50 0 28 1
+link 51 0 13 1
+link 16 0 54 0
+link 54 0 55 0
+link 55 0 51 0
+link 18 0 17 0
+link 1 0 22 0
+link 52 0 51 1
+link 62 0 31 3
+link 13 1 20 0
+link 22 1 26 0
+canvas Get_PlayerVelocityNormalized
+fnpure 0
+fnmeta 0
+fnin DeltaTime 1
+fnout velocity 1
+node 1 fn_entry -42 84 0 0 -
+node 2 fn_return 1134 84 0 0 -
+node 3 var_get 238 154 0 0 CurrentPlayerPos
+nstr 3 CurrentPlayerPos
+node 4 var_get 238 196 0 0 PrevPlayerPos
+nstr 4 PrevPlayerPos
+node 8 m_sub 462 140 0 0 -
+node 10 m_len 630 140 0 0 -
+node 11 m_div 924 140 0 0 -
+node 12 reroute 770 266 0 0 -
+node 13 reroute 224 266 0 0 -
+link 1 0 2 0
+link 3 0 8 0
+link 4 0 8 1
+link 8 0 10 0
+link 10 0 11 0
+link 11 0 2 1
+link 12 0 11 1
+link 1 1 13 0
+link 13 0 12 0
+canvas Get_PlayerVel
+fnpure 1
+fnmeta 0
+fnout Velocity 1
+node 2 fn_entry 140 210 0 0 -
+node 3 fn_return 1232 210 0 0 -
+node 4 var_get 308 280 0 0 CurrentPlayerPos
+nstr 4 CurrentPlayerPos
+node 5 var_get 308 322 0 0 PrevPlayerPos
+nstr 5 PrevPlayerPos
+node 6 m_sub 532 266 0 0 -
+node 7 break_v3 700 266 0 0 -
+node 9 val_vec 882 266 0 0 -
+node 10 m_len 1036 266 0 0 -
+link 4 0 6 0
+link 5 0 6 1
+link 6 0 7 0
+link 7 0 9 0
+link 7 2 9 2
+link 9 0 10 0
+link 10 0 3 0

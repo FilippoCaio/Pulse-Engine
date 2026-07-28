@@ -1,0 +1,413 @@
+IMPULSO 2
+entity 303
+parent 0
+name Enemy
+mesh 4
+meshasset -
+scale 1 1 1
+color 0.874 0.55 0.25 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 1 1 0.25 0.5 0.01 0.05 1
+pos 9.23567 0.995206 0.642833
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 1 1 0 0 1 2 5.99999 Audio\SW_SwordSlash.wav
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 1 3.5 10 160 1.5 1 0
+animator 1 1 1 Animations\EnemyController.animctrl
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 1 1 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph Scripts\Enemy.bp
+dcollapse 10570
+dorder 2 3 4 5 6 7 8 9 10 12 11 14 15 16 13
+varov AttackRange 2 0 0
+varov LeftEye 313 0 0
+varov RightEye 314 0 0
+bpcomponent 0 1 "Scripts\\Components\\BP_AttackComponent.bp"
+end
+entity 304
+parent 305
+name SwordMesh
+mesh 0
+meshasset -
+scale 1.13255 0.05 0.28
+color 0.864 0.824 0.848 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 0 1 0.25 0.5 0.01 0.05 1
+pos 9.85011 1.70202 -0.105167
+rot -0.0868889 -0.015066 -0.783235 0.61544
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 305
+parent 308
+name SWORD
+mesh 0
+meshasset -
+scale 0.643495 1 1
+color 0.8 0.5 0.3 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 1 1 0.3 0.5 0.01 0.05 1
+pos 9.68298 0.995206 0.00852281
+rot -0.0868888 -0.0150661 -0.783235 0.615439
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 0 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 306
+parent 305
+name SwordMesh
+mesh 0
+meshasset -
+scale 0.424707 0.11 0.09
+color 0.864 0.824 0.848 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 0 1 0.25 0.5 0.01 0.05 1
+pos 9.71812 1.14539 -0.0203172
+rot 0.492392 0.424527 -0.615272 0.445834
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 307
+parent 305
+name SwordMesh
+mesh 0
+meshasset -
+scale 0.257399 0.05 0.13
+color 0.864 0.824 0.848 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 0 1 0.25 0.5 0.01 0.05 1
+pos 9.68594 1.00811 0.00479281
+rot -0.0868889 -0.015066 -0.783235 0.61544
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 308
+parent 303
+name SwordPivot
+mesh 0
+meshasset -
+scale 1 1 1
+color 0.8 0.5 0.3 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 1 1 0.3 0.5 0.01 0.05 1
+pos 9.23567 0.995206 0.642833
+rot 0 -0.707107 0 0.707107
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 0 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 309
+parent 303
+name LeftEye
+mesh 1
+meshasset -
+scale 0.4 0.4 0.4
+color 1 1 1 1
+mat 90 0.6 0 0
+doublesided 0
+materialasset -
+body 0 1 0.55 0.4 0.01 0.05 1
+pos 9.53737 1.58188 0.316683
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 310
+parent 303
+name LeftEye
+mesh 1
+meshasset -
+scale 0.4 0.4 0.4
+color 1 1 1 1
+mat 90 0.6 0 0
+doublesided 0
+materialasset -
+body 0 1 0.55 0.4 0.01 0.05 1
+pos 8.93397 1.58188 0.316683
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 311
+parent 314
+name LeftEye
+mesh 1
+meshasset -
+scale 0.2 0.2 0.2
+color 0 0 0 1
+mat 90 0.6 0 0
+doublesided 0
+materialasset -
+body 0 1 0.55 0.4 0.01 0.05 1
+pos 9.53737 1.58188 0.166673
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 312
+parent 313
+name LeftEye
+mesh 1
+meshasset -
+scale 0.2 0.2 0.2
+color 0 0 0 1
+mat 90 0.6 0 0
+doublesided 0
+materialasset -
+body 0 1 0.55 0.4 0.01 0.05 1
+pos 8.93397 1.58188 0.168143
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 1 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 313
+parent 310
+name EyePivot_L
+mesh 0
+meshasset -
+scale 1 1 1
+color 0.8 0.5 0.3 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 1 1 0.3 0.5 0.01 0.05 1
+pos 8.93397 1.58188 0.316683
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 0 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end
+entity 314
+parent 309
+name EyePivot_R
+mesh 0
+meshasset -
+scale 1 1 1
+color 0.8 0.5 0.3 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 1 1 0.3 0.5 0.01 0.05 1
+pos 9.53737 1.58188 0.316683
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\nemici\Enemy.pfb 303
+staticflags 0
+behavior 0 6 0 0
+comps 0 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+end

@@ -1,0 +1,373 @@
+IMPULSOBP 6
+classkind 0
+uniqueinstance 1
+required 5 "EnemySource" ""
+var PlayerDetectionRadius 1 0 0 1 10 0 0 0
+vcat PlayerDetectionRadius Editable
+var AttackRange 1 0 0 1 3 0 0 0
+vcat AttackRange Editable
+var LeftEye 4 0 2 1 0 0 0 0
+vcat LeftEye Editable
+var RightEye 4 0 2 1 0 0 0 0
+vcat RightEye Editable
+var Target 4 0 2 0 0 0 0 0
+vcat Target Private
+var AttackComponent 4 0 2 0 0 0 0 0
+vclass AttackComponent blueprint:Scripts\Components\BP_AttackComponent.bp
+vcat AttackComponent Private
+var EyesHandlerTimer 11 0 2 0 0 0 0 0
+vcat EyesHandlerTimer Private
+var TargetRotationEye_L 2 0 2 0 0 0 0 0
+vcat TargetRotationEye_L Private
+var Animator 4 0 2 0 0 0 0 0
+vclass Animator asset:AnimatorController
+vasset Animator Animations\EnemyController.animctrl
+vcat Animator Private
+var CheckPlayer 11 0 2 0 0 0 0 0
+vcat CheckPlayer Private
+var AIAgent 4 0 2 0 0 0 0 0
+vclass AIAgent component:AIAgent
+vcat AIAgent Private
+var Attack 11 0 2 0 0 0 0 0
+vcat Attack Private
+var TargetRotationEye_R 2 0 2 0 0 0 0 0
+vcat TargetRotationEye_R Private
+event 
+eventmeta 0
+event CheckPlayerAttack
+eventmeta 0
+event CheckPlayerUpdate
+eventmeta 0
+event 
+eventmeta 0
+event Attack
+eventmeta 0
+event ReceiveDamage
+eventmeta 0
+evpin Damage 1
+event Execute
+eventmeta 0
+event 
+eventmeta 0
+event Attack
+eventmeta 0
+event SetEyesFollowTarget
+eventmeta 2
+evpin Follow 3
+event EyesFollowUpdate
+eventmeta 2
+canvas -
+node 1 ev_start 28 56 0 0 -
+node 2 var_set 1106 56 0 0 AIAgent
+nstr 2 AIAgent
+node 3 get_comp 658 112 0 0 -
+node 4 self 504 140 0 0 -
+node 5 l_if 924 56 0 0 -
+node 6 reroute 1022 154 0 0 -
+node 13 var_set 1190 238 0 0 Target
+nstr 13 Target
+node 14 flow_seq 266 56 0 4 -
+node 23 find_by_tag 700 308 0 0 -
+slit 23 0 Player
+node 24 reroute_ex 588 266 0 0 -
+node 25 l_if 994 238 0 0 -
+node 36 ev_custom 42 1246 0 0 CheckPlayerUpdate
+nstr 36 CheckPlayerUpdate
+node 37 ev_custom 42 1708 0 0 CheckPlayerAttack
+nstr 37 CheckPlayerAttack
+node 40 var_get 462 1288 0 0 Target
+nstr 40 Target
+node 45 timer_set 574 672 0 0 -
+lit 45 1 0.5 0 0
+lit 45 2 1 0 0
+node 46 var_set 910 672 0 0 CheckPlayer
+nstr 46 CheckPlayer
+node 47 timer_set 1148 672 0 0 -
+lit 47 1 0.1 0 0
+lit 47 2 1 0 0
+node 48 var_set 1512 672 0 0 Attack
+nstr 48 Attack
+node 49 create_event 574 798 0 0 CheckPlayerUpdate
+nstr 49 CheckPlayerUpdate
+node 50 create_event 1148 798 0 0 CheckPlayerAttack
+nstr 50 CheckPlayerAttack
+node 52 var_get 322 1330 0 0 PlayerDetectionRadius
+nstr 52 PlayerDetectionRadius
+node 54 var_get 700 504 0 0 AIAgent
+nstr 54 AIAgent
+node 55 ai_set_target 854 448 0 0 -
+node 56 var_get 700 546 0 0 Target
+nstr 56 Target
+node 59 var_get 1036 1344 0 0 AIAgent
+nstr 59 AIAgent
+node 60 ai_set_stopped 1036 1246 0 0 -
+lit 60 2 1 0 0
+node 61 l_not 882 1330 0 0 -
+node 62 reroute_ex 588 476 0 0 -
+node 63 timer_pause 1680 672 0 0 -
+node 64 call_func 588 1218 0 0 CheckDistanceToTarget
+nstr 64 CheckDistanceToTarget
+node 65 var_get 420 1750 0 0 Target
+nstr 65 Target
+node 67 call_func 546 1680 0 0 CheckDistanceToTarget
+nstr 67 CheckDistanceToTarget
+node 69 l_if 1246 1246 0 0 -
+node 70 l_if 882 1708 0 0 -
+node 73 var_get 1414 1288 0 0 Attack
+nstr 73 Attack
+node 74 timer_unpause 1610 1246 0 0 -
+node 75 timer_pause 1610 1330 0 0 -
+node 76 reroute_ex 1400 1330 0 0 -
+node 77 reroute_ex 1540 1330 0 0 -
+node 78 var_get 378 1792 0 0 AttackRange
+nstr 78 AttackRange
+node 80 flow_doonce 1078 1708 0 0 -
+node 81 flow_delay 1456 1708 0 0 -
+lit 81 1 0.5 0 0
+node 82 reroute_ex 1078 1834 0 0 -
+node 83 reroute_ex 1596 1834 0 0 -
+node 84 var_set 1792 238 0 0 Animator
+nstr 84 Animator
+node 85 get_comp 1512 294 0 10 -
+node 86 self 1358 322 0 0 -
+node 93 var_get 1022 518 0 0 Animator
+nstr 93 Animator
+node 95 anim_bind_trigger 1204 434 0 0 nome
+nstr 95 nome
+slit 95 0 Animations\EnemyController.animctrl
+node 96 create_event 1204 560 0 0 Attack
+nstr 96 Attack
+node 108 ev_custom 42 2002 0 0 Attack
+nstr 108 Attack
+node 109 var_get 224 2044 0 0 Animator
+nstr 109 Animator
+node 110 anim_set_trigger 364 1974 0 0 Attack
+nstr 110 Attack
+slit 110 0 Animations\EnemyController.animctrl
+node 111 var_get 966 2058 0 0 AttackComponent
+nstr 111 AttackComponent
+node 115 call_event 1274 1680 0 0 Attack
+nstr 115 Attack
+node 116 get_comp 2226 308 0 6 -
+slit 116 0 Scripts\Components\BP_AttackComponent.bp
+node 117 self 2075.18 331.013 0 0 -
+node 118 var_set 2506 238 0 0 AttackComponent
+nstr 118 AttackComponent
+node 119 member_access 1190 1974 0 2 Attack
+nstr 119 Attack
+slit 119 0 Scripts\Components\BP_AttackComponent.bp
+node 120 var_get 588 2058 0 0 EnemySource
+nstr 120 EnemySource
+node 122 audio_play 756 2002 0 0 -
+node 123 ev_custom 42 2436 0 0 SetEyesFollowTarget
+nstr 123 SetEyesFollowTarget
+node 124 l_if 392 2436 0 0 -
+node 125 timer_set 1316 2562 0 0 -
+lit 125 1 0.01 0 0
+lit 125 2 1 0 0
+node 126 l_if 1078 2436 0 0 -
+node 128 var_set 1666 2562 0 0 EyesHandlerTimer
+nstr 128 EyesHandlerTimer
+node 129 var_get 672 2506 0 0 EyesHandlerTimer
+nstr 129 EyesHandlerTimer
+node 130 timer_is_valid 896 2492 0 0 -
+node 131 create_event 1316 2688 0 0 EyesFollowUpdate
+nstr 131 EyesFollowUpdate
+node 132 var_get 1316 2492 0 0 EyesHandlerTimer
+nstr 132 EyesHandlerTimer
+node 133 timer_unpause 1540 2436 0 0 -
+node 134 l_if 1078 2828 0 0 -
+node 135 var_get 672 2898 0 0 EyesHandlerTimer
+nstr 135 EyesHandlerTimer
+node 136 timer_is_valid 896 2884 0 0 -
+node 137 reroute_ex 638.008 2842.34 0 0 -
+node 138 var_get 1260 2884 0 0 EyesHandlerTimer
+nstr 138 EyesHandlerTimer
+node 139 timer_pause 1484 2828 0 0 -
+node 140 ev_custom 56 3080 0 0 EyesFollowUpdate
+nstr 140 EyesFollowUpdate
+node 141 call_event 1834 1232 0 0 SetEyesFollowTarget
+nstr 141 SetEyesFollowTarget
+lit 141 1 1 0 0
+node 143 m_vinterp 2100 3192 0 0 -
+lit 143 2 0.01 0 0
+lit 143 3 15 0 0
+node 144 m_lookat 798 3192 0 0 -
+node 145 var_get 392 3220 0 0 LeftEye
+nstr 145 LeftEye
+node 146 var_get 392 3290 0 0 RightEye
+nstr 146 RightEye
+node 149 var_get 420 3360 0 0 Target
+nstr 149 Target
+node 150 wloc 546 3346 0 0 -
+node 153 m_lookat 798 3276 0 0 -
+node 154 var_set 1092 3080 0 0 TargetRotationEye_L
+nstr 154 TargetRotationEye_L
+node 155 var_set 1400 3080 0 0 TargetRotationEye_R
+nstr 155 TargetRotationEye_R
+node 157 var_get 1708 3220 0 0 LeftEye
+nstr 157 LeftEye
+node 158 var_get 2576 3192 0 0 RightEye
+nstr 158 RightEye
+node 161 m_vinterp 2954 3178 0 0 -
+lit 161 2 0.01 0 0
+lit 161 3 15 0 0
+node 162 var_get 1834 3262 0 0 TargetRotationEye_L
+nstr 162 TargetRotationEye_L
+node 163 var_get 2716 3234 0 0 TargetRotationEye_R
+nstr 163 TargetRotationEye_R
+node 164 var_get 2170 3136 0 0 LeftEye
+nstr 164 LeftEye
+node 165 set_wrot 2338 3080 0 0 -
+node 166 wrot 1834 3192 0 0 -
+node 168 wrot 2716 3178 0 0 -
+node 169 var_get 3010 3136 0 0 RightEye
+nstr 169 RightEye
+node 170 set_wrot 3192 3080 0 0 -
+node 171 wloc 546 3206 0 0 -
+node 172 wloc 546 3276 0 0 -
+node 176 m_add 798 3360 0 0 -
+node 177 val_vec 602 3402 0 0 -
+lit 177 1 0.5 0 0
+node 186 reroute 1274 3304 0 0 -
+link 4 0 3 0
+link 5 0 2 0
+link 3 1 5 1
+link 3 0 6 0
+link 6 0 2 1
+link 14 0 5 0
+link 23 0 13 1
+link 23 1 25 1
+link 14 1 24 0
+link 24 0 25 0
+link 25 0 13 0
+link 45 0 46 0
+link 45 2 46 1
+link 46 0 47 0
+link 47 2 48 1
+link 47 0 48 0
+link 49 0 45 3
+link 50 0 47 3
+link 54 0 55 1
+link 56 0 55 2
+link 59 0 60 1
+link 61 0 60 2
+link 62 0 55 0
+link 48 1 63 1
+link 48 0 63 0
+link 40 0 64 1
+link 52 0 64 2
+link 64 1 61 0
+link 36 0 64 0
+link 64 0 60 0
+link 65 0 67 1
+link 37 0 67 0
+link 60 0 69 0
+link 64 1 69 1
+link 67 0 70 0
+link 67 1 70 1
+link 73 0 74 1
+link 69 0 74 0
+link 73 0 75 1
+link 69 1 76 0
+link 76 0 77 0
+link 77 0 75 0
+link 78 0 67 2
+link 70 0 80 0
+link 82 0 80 1
+link 83 0 82 0
+link 86 0 85 0
+link 85 0 84 1
+link 13 0 84 0
+link 93 0 95 1
+link 55 0 95 0
+link 96 0 95 2
+link 14 3 45 0
+link 14 2 62 0
+link 81 0 83 0
+link 109 0 110 1
+link 108 0 110 0
+link 80 0 115 0
+link 115 0 81 0
+link 117 0 116 0
+link 84 0 118 0
+link 116 0 118 1
+link 111 0 119 1
+link 120 0 122 1
+link 122 0 119 0
+link 110 0 122 0
+link 123 1 124 1
+link 123 0 124 0
+link 124 0 126 0
+link 125 0 128 0
+link 125 2 128 1
+link 129 0 130 0
+link 130 0 126 1
+link 126 1 125 0
+link 131 0 125 3
+link 132 0 133 1
+link 126 0 133 0
+link 135 0 136 0
+link 136 0 134 1
+link 124 1 137 0
+link 137 0 134 0
+link 138 0 139 1
+link 134 0 139 0
+link 149 0 150 0
+link 154 0 155 0
+link 140 0 154 0
+link 162 0 143 1
+link 163 0 161 1
+link 164 0 165 1
+link 155 0 165 0
+link 157 0 166 0
+link 166 0 143 0
+link 158 0 168 0
+link 168 0 161 0
+link 169 0 170 1
+link 145 0 171 0
+link 171 0 144 0
+link 146 0 172 0
+link 172 0 153 0
+link 74 0 141 0
+link 161 0 170 2
+link 177 0 176 1
+link 176 0 153 1
+link 176 0 144 1
+link 150 0 176 0
+link 1 0 14 0
+link 144 0 154 1
+link 153 0 186 0
+link 186 0 155 1
+link 143 0 165 2
+link 165 0 170 0
+canvas *ConstructionScript
+node 1 ev_construct 40 80 0 0 -
+canvas CheckDistanceToTarget
+fnpure 0
+fnmeta 0
+fncat Check
+fnin Target 4
+fnin Distance 1
+fnout IsInRange 3
+node 1 fn_entry 42 84 0 0 -
+node 3 self 252 238 0 0 -
+node 4 wloc 406 238 0 0 -
+node 6 wloc 406 168 0 0 -
+node 7 m_sub 630 168 0 0 -
+node 8 m_len 784 168 0 0 -
+node 9 l_cmp 980 140 0 3 -
+node 11 reroute 882 322 0 0 -
+node 12 reroute 252 322 0 0 -
+node 13 fn_return 1162 84 0 0 -
+link 3 0 4 0
+link 6 0 7 0
+link 4 0 7 1
+link 7 0 8 0
+link 8 0 9 0
+link 1 1 6 0
+link 11 0 9 1
+link 1 2 12 0
+link 12 0 11 0
+link 9 0 13 1
+link 1 0 13 0

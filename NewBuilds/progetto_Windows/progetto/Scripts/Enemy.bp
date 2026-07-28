@@ -1,0 +1,160 @@
+IMPULSOBP 6
+classkind 0
+var PlayerDetectionRadius 1 0 0 1 10 0 0 0
+var AttackRange 1 0 0 1 3 0 0 0
+var AIAgent 4 0 2 0 0 0 0 0
+vclass AIAgent component:AIAgent
+var Player 4 0 2 0 0 0 0 0
+var Attack 11 0 2 0 0 0 0 0
+var CheckPlayer 11 0 2 0 0 0 0 0
+event 
+event CheckPlayerAttack
+event CheckPlayerUpdate
+canvas -
+node 1 ev_start 42 56 0 0 -
+node 2 var_set 1106 56 0 0 AIAgent
+nstr 2 AIAgent
+node 3 get_comp 658 112 0 0 -
+node 4 self 504 140 0 0 -
+node 5 l_if 924 56 0 0 -
+node 6 reroute 1022 154 0 0 -
+node 13 var_set 1190 238 0 0 Player
+nstr 13 Player
+node 14 flow_seq 266 56 0 4 -
+node 23 find_by_tag 700 308 0 0 -
+slit 23 0 Player
+node 24 reroute_ex 588 266 0 0 -
+node 25 l_if 994 238 0 0 -
+node 36 ev_custom 42 1078 0 0 CheckPlayerUpdate
+nstr 36 CheckPlayerUpdate
+node 37 ev_custom 42 1540 0 0 CheckPlayerAttack
+nstr 37 CheckPlayerAttack
+node 40 var_get 462 1120 0 0 Player
+nstr 40 Player
+node 45 timer_set 560 630 0 0 -
+lit 45 1 0.5 0 0
+lit 45 2 1 0 0
+node 46 var_set 896 630 0 0 CheckPlayer
+nstr 46 CheckPlayer
+node 47 timer_set 1134 630 0 0 -
+lit 47 1 0.1 0 0
+lit 47 2 1 0 0
+node 48 var_set 1498 630 0 0 Attack
+nstr 48 Attack
+node 49 create_event 560 756 0 0 CheckPlayerUpdate
+nstr 49 CheckPlayerUpdate
+node 50 create_event 1134 756 0 0 CheckPlayerAttack
+nstr 50 CheckPlayerAttack
+node 52 var_get 322 1162 0 0 PlayerDetectionRadius
+nstr 52 PlayerDetectionRadius
+node 54 var_get 700 504 0 0 AIAgent
+nstr 54 AIAgent
+node 55 ai_set_target 854 448 0 0 -
+node 56 var_get 700 546 0 0 Player
+nstr 56 Player
+node 59 var_get 882 1120 0 0 AIAgent
+nstr 59 AIAgent
+node 60 ai_set_stopped 1036 1078 0 0 -
+lit 60 2 1 0 0
+node 61 l_not 882 1162 0 0 -
+node 62 reroute_ex 588 476 0 0 -
+node 63 timer_pause 1666 630 0 0 -
+node 64 call_func 588 1050 0 0 CheckDistanceToTarget
+nstr 64 CheckDistanceToTarget
+node 65 var_get 420 1582 0 0 Player
+nstr 65 Player
+node 67 call_func 546 1512 0 0 CheckDistanceToTarget
+nstr 67 CheckDistanceToTarget
+node 69 l_if 1246 1078 0 0 -
+node 70 l_if 882 1540 0 0 -
+node 73 var_get 1414 1120 0 0 Attack
+nstr 73 Attack
+node 74 timer_unpause 1610 1078 0 0 -
+node 75 timer_pause 1610 1162 0 0 -
+node 76 reroute_ex 1400 1162 0 0 -
+node 77 reroute_ex 1540 1162 0 0 -
+node 78 var_get 378 1624 0 0 AttackRange
+nstr 78 AttackRange
+node 80 flow_doonce 1064 1540 0 0 -
+node 81 flow_delay 1428 1540 0 0 -
+lit 81 1 1 0 0
+node 82 reroute_ex 1092 1624 0 0 -
+node 83 reroute_ex 1526 1624 0 0 -
+link 4 0 3 0
+link 5 0 2 0
+link 3 1 5 1
+link 3 0 6 0
+link 6 0 2 1
+link 14 0 5 0
+link 23 0 13 1
+link 23 1 25 1
+link 14 1 24 0
+link 24 0 25 0
+link 25 0 13 0
+link 1 0 14 0
+link 45 0 46 0
+link 45 2 46 1
+link 46 0 47 0
+link 47 2 48 1
+link 47 0 48 0
+link 49 0 45 3
+link 50 0 47 3
+link 54 0 55 1
+link 56 0 55 2
+link 59 0 60 1
+link 61 0 60 2
+link 14 3 45 0
+link 14 2 62 0
+link 62 0 55 0
+link 48 1 63 1
+link 48 0 63 0
+link 40 0 64 1
+link 52 0 64 2
+link 64 1 61 0
+link 36 0 64 0
+link 64 0 60 0
+link 65 0 67 1
+link 37 0 67 0
+link 60 0 69 0
+link 64 1 69 1
+link 67 0 70 0
+link 67 1 70 1
+link 73 0 74 1
+link 69 0 74 0
+link 73 0 75 1
+link 69 1 76 0
+link 76 0 77 0
+link 77 0 75 0
+link 78 0 67 2
+link 70 0 80 0
+link 82 0 80 1
+link 81 0 83 0
+link 83 0 82 0
+canvas *ConstructionScript
+node 1 ev_construct 40 80 0 0 -
+canvas CheckDistanceToTarget
+fnpure 0
+fnin Target 4
+fnin Distance 1
+fnout IsInRange 3
+node 1 fn_entry 42 84 0 0 -
+node 3 self 252 238 0 0 -
+node 4 wloc 406 238 0 0 -
+node 6 wloc 406 168 0 0 -
+node 7 m_sub 630 168 0 0 -
+node 8 m_len 784 168 0 0 -
+node 9 l_cmp 980 140 0 3 -
+node 11 reroute 882 322 0 0 -
+node 12 reroute 252 322 0 0 -
+node 13 fn_return 1162 84 0 0 -
+link 3 0 4 0
+link 6 0 7 0
+link 4 0 7 1
+link 7 0 8 0
+link 8 0 9 0
+link 1 1 6 0
+link 11 0 9 1
+link 1 2 12 0
+link 12 0 11 0
+link 9 0 13 1
+link 1 0 13 0

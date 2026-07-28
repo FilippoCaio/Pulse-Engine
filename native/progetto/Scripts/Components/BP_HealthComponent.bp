@@ -1,0 +1,65 @@
+IMPULSOBP 6
+classkind 0
+uniqueinstance 1
+var MaxHealth 1 0 0 1 0 0 0 0
+var CurrentHealth 1 0 2 0 0 0 0 0
+event 
+eventmeta 0
+event ResetHealth
+eventmeta 0
+event ReceiveDamage
+eventmeta 0
+evpin Damage 1
+iface ReceiveDamage
+ifaceasset Scripts\Interfaces\BPI_Damageble.bpi
+disp OnDeath
+disp OnDamage
+disppin CurrentHealth 1
+canvas -
+node 1 ev_start 42 56 0 0 -
+node 2 call_disp -798 -210 0 0 OnDeath
+nstr 2 OnDeath
+node 6 ev_custom 42 658 0 0 ResetHealth
+nstr 6 ResetHealth
+node 7 var_set 420 658 0 0 CurrentHealth
+nstr 7 CurrentHealth
+node 8 var_get 252 714 0 0 MaxHealth
+nstr 8 MaxHealth
+node 9 call_event 266 42 0 0 ResetHealth
+nstr 9 ResetHealth
+node 10 ev_custom 42 280 0 0 ReceiveDamage
+nstr 10 ReceiveDamage
+slit 10 0 Scripts\Interfaces\BPI_Damageble.bpi
+node 11 var_set 662 300 0 0 CurrentHealth
+nstr 11 CurrentHealth
+node 12 var_get 126 392 0 0 CurrentHealth
+nstr 12 CurrentHealth
+node 13 m_sub 490 350 0 0 -
+node 14 l_cmp 882 392 0 3 -
+node 15 l_if 1442 294 0 0 -
+node 16 var_set 1666 294 0 0 CurrentHealth
+nstr 16 CurrentHealth
+node 18 call_disp 1932 266 0 0 OnDeath
+nstr 18 OnDeath
+node 28 call_disp 1218 280 0 0 OnDamage
+nstr 28 OnDamage
+node 29 var_get 1022 350 0 0 CurrentHealth
+nstr 29 CurrentHealth
+node 30 reroute 1344 434 0 0 -
+link 6 0 7 0
+link 8 0 7 1
+link 1 0 9 0
+link 10 0 11 0
+link 12 0 13 0
+link 10 1 13 1
+link 13 0 11 1
+link 11 1 14 0
+link 15 0 16 0
+link 16 0 18 0
+link 29 0 28 1
+link 11 0 28 0
+link 28 0 15 0
+link 14 0 30 0
+link 30 0 15 1
+canvas *ConstructionScript
+node 1 ev_construct 40 80 0 0 -
