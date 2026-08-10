@@ -24,6 +24,8 @@ typedef ptrdiff_t GLintptr;
 #define GL_TEXTURE1                       0x84C1
 #define GL_FRAMEBUFFER                    0x8D40
 #define GL_DEPTH_ATTACHMENT               0x8D00
+#define GL_COLOR_ATTACHMENT0              0x8CE0
+#define GL_RENDERBUFFER                   0x8D41
 #define GL_FRAMEBUFFER_COMPLETE           0x8CD5
 #define GL_DEPTH_COMPONENT24              0x81A6
 #define GL_TEXTURE_COMPARE_MODE           0x884C
@@ -89,7 +91,11 @@ typedef ptrdiff_t GLintptr;
     X(void, glGenFramebuffers, (GLsizei n, GLuint* framebuffers)) \
     X(void, glBindFramebuffer, (GLenum target, GLuint framebuffer)) \
     X(void, glFramebufferTexture2D, (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
-    X(GLenum, glCheckFramebufferStatus, (GLenum target))
+    X(GLenum, glCheckFramebufferStatus, (GLenum target)) \
+    X(void, glGenRenderbuffers, (GLsizei n, GLuint* renderbuffers)) \
+    X(void, glBindRenderbuffer, (GLenum target, GLuint renderbuffer)) \
+    X(void, glRenderbufferStorage, (GLenum target, GLenum internalformat, GLsizei width, GLsizei height)) \
+    X(void, glFramebufferRenderbuffer, (GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer))
 
 #define X(ret, name, args) typedef ret(WINAPI* PFN_##name) args; extern PFN_##name name;
 GL_FUNCS

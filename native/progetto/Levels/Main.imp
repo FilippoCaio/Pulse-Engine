@@ -48,7 +48,7 @@ triggershape 0
 elayer 3
 graph -
 dcollapse 8
-dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
 end
 entity 17
 parent 0
@@ -82,7 +82,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
 end
 entity 56
 parent 0
@@ -116,7 +116,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 315
 parent 0
@@ -151,7 +151,7 @@ triggershape 0
 elayer 1
 graph Scripts\SimpleCharacterMovement.bp
 dcollapse 5
-dorder 2 3 8 6 4 5 7 9 10 11 12 13 14 15 16
+dorder 2 3 8 6 4 5 7 9 10 11 12 13 14 15 16 17
 varov CameraBobAmplitude 0.2 0 0
 varov CameraBobAmplitude_Pitch 0.2 0 0
 varov CameraBobAmplitude_Roll 0.15 0 0
@@ -183,7 +183,7 @@ body 1 1 0.25 0.5 0.01 0.05 1
 pos -5.01418 1.75594 1.481
 rot 0 -0.707107 0 0.707107
 light 0 1 0.85 0.55 3 12
-camera 1 90 0 0.1 500 1 65533
+camera 1 90 0 0.1 500 1 65533 1
 audio 0 1 0 1 1 1 25 -
 audio_class -
 audio_atten -
@@ -202,7 +202,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
 end
 entity 317
 parent 315
@@ -236,7 +236,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
 end
 entity 318
 parent 0
@@ -270,7 +270,7 @@ triggershape 0
 elayer 0
 graph Scripts\Enemy.bp
 dcollapse 10250
-dorder 2 3 4 5 6 7 8 9 10 12 11 14 15 16 13
+dorder 2 3 4 5 6 7 8 9 10 12 11 14 15 16 13 17
 varov AttackRange 2 0 0
 varov LeftEye 328 0 0
 varov RightEye 329 0 0
@@ -308,7 +308,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 320
 parent 323
@@ -342,7 +342,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 321
 parent 320
@@ -376,7 +376,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 322
 parent 320
@@ -410,7 +410,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 323
 parent 318
@@ -444,7 +444,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 324
 parent 318
@@ -478,7 +478,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 325
 parent 318
@@ -512,7 +512,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 326
 parent 329
@@ -546,7 +546,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 327
 parent 328
@@ -580,7 +580,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 328
 parent 325
@@ -614,7 +614,7 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
 entity 329
 parent 324
@@ -648,5 +648,5 @@ triggershape 0
 elayer 0
 graph -
 dcollapse 0
-dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16
+dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end

@@ -35,6 +35,9 @@ uniform vec3 uColor;
 uniform float uOpacity;
 uniform float uShininess, uSpecular, uChecker, uEmissive;
 uniform int uDoubleSided;
+uniform int uUnlit;             // 1 = the base colour is the output, no lighting
+uniform int uEmissiveTinted;    // 1 = emission uses uEmissiveColor instead of the base
+uniform vec3 uEmissiveColor;
 uniform sampler2D uAlbedoTex;
 uniform int uUseAlbedo;
 uniform float uUvScale;
@@ -84,25 +87,28 @@ void main() {
         vec2 cell = floor(vWorldPos.xz / uChecker);
         base *= mix(0.82, 1.0, mod(cell.x + cell.y, 2.0));
     }
-    float hemi = N.y * 0.5 + 0.5;
-    vec3 color = base * mix(uAmbientGround, uAmbientSky, hemi);
-    float sh = shadowFactor(N);
-    float ndl = max(dot(N, uSunDir), 0.0);
-    vec3 H = normalize(uSunDir + V);
-    float spec = pow(max(dot(N, H), 0.0), uShininess) * uSpecular;
-    color += (base * ndl + vec3(spec)) * uSunColor * sh;
-    for (int i = 0; i < 8; i++) {
-        if (i >= uLightCount) break;
-        vec3 L = uLightPos[i] - vWorldPos;
-        float dist = length(L);
-        L /= max(dist, 1e-4);
-        float x = clamp(1.0 - pow(dist / uLightRange[i], 2.0), 0.0, 1.0);
-        float nl = max(dot(N, L), 0.0);
-        vec3 Hp = normalize(L + V);
-        float sp = pow(max(dot(N, Hp), 0.0), uShininess) * uSpecular;
-        color += (base * nl + vec3(sp)) * uLightColor[i] * (x * x);
+    vec3 color = base;
+    if (uUnlit == 0) {
+        float hemi = N.y * 0.5 + 0.5;
+        color = base * mix(uAmbientGround, uAmbientSky, hemi);
+        float sh = shadowFactor(N);
+        float ndl = max(dot(N, uSunDir), 0.0);
+        vec3 H = normalize(uSunDir + V);
+        float spec = pow(max(dot(N, H), 0.0), uShininess) * uSpecular;
+        color += (base * ndl + vec3(spec)) * uSunColor * sh;
+        for (int i = 0; i < 8; i++) {
+            if (i >= uLightCount) break;
+            vec3 L = uLightPos[i] - vWorldPos;
+            float dist = length(L);
+            L /= max(dist, 1e-4);
+            float x = clamp(1.0 - pow(dist / uLightRange[i], 2.0), 0.0, 1.0);
+            float nl = max(dot(N, L), 0.0);
+            vec3 Hp = normalize(L + V);
+            float sp = pow(max(dot(N, Hp), 0.0), uShininess) * uSpecular;
+            color += (base * nl + vec3(sp)) * uLightColor[i] * (x * x);
+        }
     }
-    color += base * uEmissive;
+    color += (uEmissiveTinted != 0 ? uEmissiveColor : base) * uEmissive;
     float fd = length(uCamPos - vWorldPos);
     float fog = 1.0 - exp(-uFogDensity * uFogDensity * fd * fd);
     color = mix(color, uFogColor, clamp(fog, 0.0, 1.0));
@@ -220,6 +226,74 @@ in vec4 vColor;
 out vec4 fragColor;
 uniform sampler2D uTex;
 void main() { fragColor = texture(uTex, vUV) * vColor; })";
+
+// ─── post process: one fullscreen pass over the finished image ───
+// Bloom is a single-pass approximation (a ring of taps around each pixel keeps
+// only what is above the threshold) rather than a proper downsample chain — it
+// is cheap and reads correctly, but it will not bloom huge soft halos.
+static const char* POST_VS = R"(#version 330 core
+out vec2 vUV;
+void main() {
+    vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+    vUV = p;
+    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+})";
+
+static const char* POST_FS = R"(#version 330 core
+in vec2 vUV;
+out vec4 fragColor;
+uniform sampler2D uScene;
+uniform vec4 uRect;          // xy = uv origin of the viewport, zw = its uv size
+uniform vec2 uTexel;
+uniform float uExposure, uContrast, uSaturation;
+uniform vec3 uTint;
+uniform float uVignette, uBloomThreshold, uBloomIntensity;
+uniform float uChromatic, uGrain, uTime;
+
+vec3 sceneAt(vec2 uv) { return texture(uScene, clamp(uv, uRect.xy, uRect.xy + uRect.zw)).rgb; }
+
+void main() {
+    vec2 uv = uRect.xy + vUV * uRect.zw;
+    vec2 centred = vUV * 2.0 - 1.0;          // -1..1 inside the viewport
+    vec3 color;
+    if (uChromatic > 0.0) {
+        vec2 offset = centred * uChromatic * uTexel;
+        color.r = sceneAt(uv + offset).r;
+        color.g = sceneAt(uv).g;
+        color.b = sceneAt(uv - offset).b;
+    } else {
+        color = sceneAt(uv);
+    }
+
+    if (uBloomIntensity > 0.0) {
+        vec3 bleed = vec3(0.0);
+        float total = 0.0;
+        float knee = max(1.0 - uBloomThreshold, 0.05);
+        for (int i = 0; i < 12; i++) {
+            float a = float(i) * 0.5236;      // 30 degrees apart
+            for (int ring = 1; ring <= 2; ring++) {
+                vec2 d = vec2(cos(a), sin(a)) * uTexel * (3.0 * float(ring));
+                bleed += max(sceneAt(uv + d) - uBloomThreshold, vec3(0.0)) / knee;
+                total += 1.0;
+            }
+        }
+        color += bleed / total * uBloomIntensity;
+    }
+
+    color *= uExposure * uTint;
+    color = (color - 0.5) * uContrast + 0.5;
+    float grey = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    color = mix(vec3(grey), color, uSaturation);
+    if (uVignette > 0.0) {
+        float d = length(centred) * 0.7071;   // 1 at the corners
+        color *= mix(1.0, clamp(1.0 - d * d, 0.0, 1.0), uVignette);
+    }
+    if (uGrain > 0.0) {
+        float n = fract(sin(dot(vUV * 1024.0 + uTime, vec2(12.9898, 78.233))) * 43758.5453);
+        color += (n - 0.5) * uGrain;
+    }
+    fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+})";
 
 // ═══ helpers ═══
 static GLuint compileProgram(const char* vs, const char* fs, const char* name) {
@@ -477,6 +551,7 @@ bool Renderer::init() {
     line_.id = compileProgram(LINE_VS, LINE_FS, "line");
     text_.id = compileProgram(TEXT_VS, TEXT_FS, "text");
     image_.id = compileProgram(TEXT_VS, IMAGE_FS, "image");
+    post_.id = compileProgram(POST_VS, POST_FS, "post");
     if (!lit_.id || !depth_.id || !sky_.id || !grid_.id || !line_.id || !text_.id) return false;
 
     std::vector<float> d;
@@ -813,12 +888,22 @@ void Renderer::drawItemsLit(const std::vector<const DrawItem*>& items, bool over
     GLint uUseAlbedo = lit_.u("uUseAlbedo");
     GLint uAlbedoTex = lit_.u("uAlbedoTex");
     GLint uUvScale = lit_.u("uUvScale");
+    GLint uUnlit = lit_.u("uUnlit");
+    GLint uEmissiveTinted = lit_.u("uEmissiveTinted");
+    GLint uEmissiveColor = lit_.u("uEmissiveColor");
     glUniform1f(uUvScale, 0.5f);   // texture repeats every 2 object-space units
     float nm[9];
+    bool additiveBlend = false;
     for (const DrawItem* itemPtr : items) {
         const DrawItem& item = *itemPtr;
         if(transparencyPass==0&&item.opacity<.999f)continue;
         if(transparencyPass==1&&item.opacity>=.999f)continue;
+        // Additive materials add their light instead of covering what is behind
+        // them; the blend func is per-item, so only switch it when it changes.
+        if (transparencyPass == 1 && item.additive != additiveBlend) {
+            additiveBlend = item.additive;
+            glBlendFunc(GL_SRC_ALPHA, additiveBlend ? GL_ONE : GL_ONE_MINUS_SRC_ALPHA);
+        }
         glUniformMatrix4fv(uModel, 1, GL_FALSE, item.model.m);
         item.model.normalMat3(nm);
         glUniformMatrix3fv(uNormalMat, 1, GL_FALSE, nm);
@@ -828,6 +913,9 @@ void Renderer::drawItemsLit(const std::vector<const DrawItem*>& items, bool over
         glUniform1f(uSpecular, item.specular);
         glUniform1f(uChecker, item.checker);
         glUniform1f(uEmissive, overlayPass ? (item.emissive > 0 ? item.emissive : 2.0f) : item.emissive);
+        glUniform1i(uEmissiveTinted, !overlayPass && item.emissiveTinted ? 1 : 0);
+        glUniform3f(uEmissiveColor, item.emissiveColor.x, item.emissiveColor.y, item.emissiveColor.z);
+        glUniform1i(uUnlit, item.unlit ? 1 : 0);
         glUniform1i(uDoubleSided, item.doubleSided ? 1 : 0);
         // material base-colour texture (unit 1; unit 0 is the shadow map)
         bool useTex = item.albedoTex != 0 && !overlayPass;
@@ -842,11 +930,44 @@ void Renderer::drawItemsLit(const std::vector<const DrawItem*>& items, bool over
         glDrawElements(GL_TRIANGLES, meshes_[item.mesh].count, GL_UNSIGNED_INT, nullptr);
         drawCalls++;
     }
+    if (additiveBlend) glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);   // leave the default set
+}
+
+// Lazily (re)allocates the offscreen colour+depth the post pass reads from. It
+// matches the window, so the same target serves any viewport rect inside it.
+bool Renderer::ensureSceneTarget(int w, int h) {
+    if (w <= 0 || h <= 0) return false;
+    if (sceneFbo_ && sceneTexW_ == w && sceneTexH_ == h) return true;
+    if (!sceneFbo_) glGenFramebuffers(1, &sceneFbo_);
+    if (!sceneTex_) glGenTextures(1, &sceneTex_);
+    if (!sceneDepth_) glGenRenderbuffers(1, &sceneDepth_);
+    glBindTexture(GL_TEXTURE_2D, sceneTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindRenderbuffer(GL_RENDERBUFFER, sceneDepth_);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+    glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneTex_, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, sceneDepth_);
+    bool ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (!ok) { sceneTexW_ = sceneTexH_ = 0; return false; }
+    sceneTexW_ = w; sceneTexH_ = h;
+    return true;
 }
 
 void Renderer::render(const Frame& frame, const OrbitCamera& cam, int vx, int vy, int vw, int vh, bool clearAll) {
     drawCalls = 0;
     const Env& env = frame.env;
+    // A graded frame is drawn into the offscreen target first, then resolved
+    // through the post shader into the viewport rect. Everything else is
+    // untouched: with neutral settings the scene goes straight to the screen.
+    bool wantsPost = post_.id != 0 && !frame.post.isNeutral() && vw > 0 && vh > 0 &&
+                     ensureSceneTarget(width_, height_);
+    GLuint targetFbo = wantsPost ? sceneFbo_ : 0;
 
     // ── shadow pass ──
     float ext = 26;
@@ -881,18 +1002,18 @@ void Renderer::render(const Frame& frame, const OrbitCamera& cam, int vx, int vy
         drawCalls++;
     }
     glCullFace(GL_BACK);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
 
     // ── main pass ──
     // clear the whole framebuffer to a neutral colour (the UI draws over it),
     // then render the 3D scene only inside the viewport rect
-    if (clearAll) {
+    if (clearAll && !wantsPost) {
         glViewport(0, 0, width_, height_);
         glDisable(GL_SCISSOR_TEST);
         glClearColor(0.09f, 0.10f, 0.115f, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
-    if (vw <= 0 || vh <= 0) { glBindVertexArray(0); return; }
+    if (vw <= 0 || vh <= 0) { glBindVertexArray(0); glBindFramebuffer(GL_FRAMEBUFFER, 0); return; }
 
     int glY = height_ - (vy + vh);        // GL origin is bottom-left
     glViewport(vx, glY, vw, vh);
@@ -901,7 +1022,8 @@ void Renderer::render(const Frame& frame, const OrbitCamera& cam, int vx, int vy
     // overlay mode: the framebuffer already holds UI under this rect and stale
     // depth from an earlier pass — clear just this rect's depth (scissor-limited)
     // so the scene composes correctly. The sky pass repaints the colour.
-    if (!clearAll) {
+    // The offscreen target is never shared with the UI, so it always clears.
+    if (!clearAll || wantsPost) {
         glDepthMask(GL_TRUE);
         glClear(GL_DEPTH_BUFFER_BIT);
     }
@@ -1018,6 +1140,45 @@ void Renderer::render(const Frame& frame, const OrbitCamera& cam, int vx, int vy
         drawItemsLit(overlayItems_, true);
     }
     glEnable(GL_CULL_FACE);   // restore for the next frame's shadow pass
+
+    // ── post process: resolve the offscreen image into the viewport rect ──
+    if (wantsPost) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        if (clearAll) {
+            glViewport(0, 0, width_, height_);
+            glDisable(GL_SCISSOR_TEST);
+            glClearColor(0.09f, 0.10f, 0.115f, 1);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        }
+        glViewport(vx, glY, vw, vh);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(vx, glY, vw, vh);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+        glUseProgram(post_.id);
+        const PostSettings& p = frame.post;
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sceneTex_);
+        glUniform1i(post_.u("uScene"), 0);
+        glUniform4f(post_.u("uRect"), (float)vx / width_, (float)glY / height_,
+                    (float)vw / width_, (float)vh / height_);
+        glUniform2f(post_.u("uTexel"), 1.0f / width_, 1.0f / height_);
+        glUniform1f(post_.u("uExposure"), p.exposure);
+        glUniform1f(post_.u("uContrast"), p.contrast);
+        glUniform1f(post_.u("uSaturation"), p.saturation);
+        glUniform3f(post_.u("uTint"), p.tint.x, p.tint.y, p.tint.z);
+        glUniform1f(post_.u("uVignette"), p.vignette);
+        glUniform1f(post_.u("uBloomThreshold"), p.bloomThreshold);
+        glUniform1f(post_.u("uBloomIntensity"), p.bloomIntensity);
+        glUniform1f(post_.u("uChromatic"), p.chromaticAberration);
+        glUniform1f(post_.u("uGrain"), p.grain);
+        glUniform1f(post_.u("uTime"), p.time);
+        glBindVertexArray(screenVao_);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        drawCalls++;
+        glEnable(GL_DEPTH_TEST);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, width_, height_);
     glBindVertexArray(0);

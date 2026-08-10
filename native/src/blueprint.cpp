@@ -3583,6 +3583,32 @@ static bool icontains(const char* hay, const char* needle) {
 static bool isVarGet(int def) { return def == BP_VAR_GET || def == BP_LOCAL_GET; }
 static bool isVarSet(int def) { return def == BP_VAR_SET || def == BP_LOCAL_SET; }
 
+// Wildcard math: A and B take whatever they are given and the node promotes to
+// the widest of the two (vector beats vector2 beats int beats float). They are
+// drawn like a Set node — a blank grey pill until a typed pin resolves them.
+static bool isWildcardMath(int def) {
+    return def == BP_M_ADD || def == BP_M_SUB || def == BP_M_MUL || def == BP_M_DIV || def == BP_M_LERP;
+}
+// ...and only over values bpMathOp actually understands. A Transform, a String,
+// an object reference or a Color would silently fold to zero, so the wire is
+// refused rather than quietly producing nonsense.
+static bool bpMathAcceptsKind(PinKind k) {
+    return k == PIN_ANY || k == PIN_NUM || k == PIN_INT || k == PIN_BOOL ||
+           k == PIN_VEC || k == PIN_VEC2;
+}
+// Lerp's Alpha is a declared float, not one of the wildcard pins
+static bool isWildcardMathPin(int def, int pin) {
+    if (!isWildcardMath(def)) return false;
+    return !(def == BP_M_LERP && pin == 2);
+}
+// false when this wire would feed a wildcard math node a value it cannot compute
+static bool mathLinkAllowed(const BPCanvas& cv, const BPGraph& g,
+                            int fromNode, int fromPin, int toNode, int toPin) {
+    const BPNode* to = cv.byId(toNode);
+    if (!to || !isWildcardMathPin(to->def, toPin)) return true;
+    return bpMathAcceptsKind(bpEffKind(cv, g, fromNode, fromPin, true, 0));
+}
+
 static int nodeStrips(const BPNode& n) {
     if (n.def == BP_EV_KEY) return 0;   // InputAction: solo i 3 exec, tasto nel titolo
     if (n.def == BP_EV_CUSTOM) return n.slit[0].empty() ? 0 : 1; // interface origin under the event title
@@ -4102,6 +4128,8 @@ bool BPEditor::doSaveDialog(char* out) {
 }
 
 bool BPEditor::saveTo(const std::string& absPath) {
+    extern bool gEditorProjectWritesAllowed;
+    if (!gEditorProjectWritesAllowed) return false;
     std::string ext = fs::path(absPath).extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)tolower(c); });
     if (ext == ".bpi") normalizeInterfaceAsset();
@@ -6872,8 +6900,15 @@ void BPEditor::draw(UI& ui) {
     // In a Widget the two toggles live on the widget editor's own tool bar, on the
     // same row as its Save button — no separate row here.
     if (!widgetMode) {
-        ui.beginCenteredToolRow(5, 56.0f, 10.0f);
-        if (ui.toolIconButton("bp_tool_save", 0, false, "Save the Blueprint", dirty)) {
+        // Left-aligned bar with the same metrics as the Widget editor's, so every
+        // document editor carries one tool bar that reads the same way.
+        UIRect bar = ui.allocRow(38);
+        r->drawRectPx(bar.x, bar.y, bar.w, bar.h, { 0.105f, 0.115f, 0.14f }, 1);
+        r->drawRectPx(bar.x, bar.y + bar.h - 1, bar.w, 1, { 0.05f, 0.055f, 0.065f }, 1);
+        const float BW = 34, BH = bar.h - 10;
+        float bx = bar.x + 8;
+        auto slot = [&]() { UIRect rc = { bx, bar.y + 5, BW, BH }; bx += BW + 8; return rc; };
+        if (ui.toolIconButtonRect("bp_tool_save", slot(), 0, false, "Save the Blueprint", dirty)) {
             char path[MAX_PATH];
             std::string abs = curPath.empty() ? "" : projectDir + "\\" + curPath;
             if (!abs.empty() || doSaveDialog(path)) {
@@ -6881,18 +6916,17 @@ void BPEditor::draw(UI& ui) {
                 if (saveTo(abs) && logFn) logFn(1, "Blueprint saved: %s", curPath.c_str());
             }
         }
-        if (ui.toolIconButton("bp_tool_save_as", 1, false, "Save the Blueprint under a new name")) {
+        if (ui.toolIconButtonRect("bp_tool_save_as", slot(), 1, false, "Save the Blueprint under a new name")) {
             char path[MAX_PATH];
             if (doSaveDialog(path) && saveTo(path) && logFn) logFn(1, "Blueprint saved: %s", curPath.c_str());
         }
-        if (ui.toolIconButton("bp_tool_assign", 2, false, signatureOnly ? "Interfaces are not assigned to objects" : "Assign the Blueprint to the selected object") && !signatureOnly)
+        if (ui.toolIconButtonRect("bp_tool_assign", slot(), 2, false, signatureOnly ? "Interfaces are not assigned to objects" : "Assign the Blueprint to the selected object") && !signatureOnly)
             assignRequested = true;
-        if (ui.toolIconButton("bp_tool_panels", 3, showVars, "Shows or hides the Blueprint panels")) showVars = !showVars;
-        if (ui.toolIconButton("bp_tool_settings", 4, settingsOpen, "Opens or closes the Blueprint Settings")) {
+        if (ui.toolIconButtonRect("bp_tool_panels", slot(), 3, showVars, "Shows or hides the Blueprint panels")) showVars = !showVars;
+        if (ui.toolIconButtonRect("bp_tool_settings", slot(), 4, settingsOpen, "Opens or closes the Blueprint Settings")) {
             settingsOpen = !settingsOpen;
             if (settingsOpen) showVars = true;
         }
-        ui.endCenteredToolRow();
     }
 
     // header row for the current function / extra event graph. The function name is
@@ -7392,6 +7426,14 @@ void BPEditor::draw(UI& ui) {
                                 nearAnyPin = true;
                                 continue;
                             }
+                            if (!mathLinkAllowed(C, graph, fromN, fromP, toN, toP)) {
+                                const BPNode* mathNode = C.byId(toN);
+                                if (logFn)
+                                    logFn(2, "%s only works on Float, Integer, Boolean, Vector or Vector2 values.",
+                                          mathNode ? DEFS[mathNode->def].title : "This node");
+                                nearAnyPin = true;
+                                continue;
+                            }
                             C.connect(fromN, fromP, toN, toP);
                             connected = true;
                             dirty = true;
@@ -7839,10 +7881,13 @@ void BPEditor::draw(UI& ui) {
             continue;
         }
         float NT = NTITLE_H * Z;
-        if (isVarSet(n.def)) {
+        if (isVarSet(n.def) || isWildcardMath(n.def)) {
             // stessa grafica del Get: pill smussata colorata dal tipo della variabile,
-            // ma con header "SET name" e le righe pin (exec+valore in / exec+ritorno out)
-            PinKind vk = bpEffKind(C, graph, n.id, 1, true, 0);   // tipo del pin di ritorno = tipo variabile
+            // ma con header "SET name" e le righe pin (exec+valore in / exec+ritorno out).
+            // A wildcard math node borrows the same pill: it is blank grey until an
+            // input resolves it, then wears the promoted type's colour.
+            PinKind vk = isVarSet(n.def) ? bpEffKind(C, graph, n.id, 1, true, 0)   // tipo del pin di ritorno = tipo variabile
+                                         : bpEffKind(C, graph, n.id, 0, true, 0);  // tipo promosso dagli ingressi
             Vec3 pc = PIN_COLORS[vk];
             Vec3 body = pc * 0.28f + Vec3{ 0.06f, 0.065f, 0.075f };
             const Vec3 bg = { 0.07f, 0.078f, 0.09f };
@@ -7860,8 +7905,9 @@ void BPEditor::draw(UI& ui) {
             r->drawRectPx(nx + ch, ny + h - 1, w - 2 * ch, 1, border, 1);
             r->drawRectPx(nx, ny + ch, 1, h - 2 * ch, border, 1);
             r->drawRectPx(nx + w - 1, ny + ch, 1, h - 2 * ch, border, 1);
-            char htxt[64];
-            snprintf(htxt, sizeof(htxt), "SET  %s", n.sname);
+            char htxt[160];
+            if (isVarSet(n.def)) snprintf(htxt, sizeof(htxt), "SET  %s", n.sname);
+            else bpNodeTitle(n, htxt, sizeof(htxt));
             r->drawTextLine(nx + 9 * Z, ny + 3 * Z, ui.ellipsize(htxt, w / Z - 18), { 0.95f, 0.96f, 1.0f }, 1, Z);
         } else {
             r->drawRectPx(nx + 3, ny + 4, w, h, { 0, 0, 0 }, 0.3f);
@@ -7923,7 +7969,11 @@ void BPEditor::draw(UI& ui) {
         for (int p = 0; p < d.nIns; p++) {
             float px, py;
             pinPos(n, ox, oy, p, false, &px, &py);
-            Vec3 pc = PIN_COLORS[bpEffKind(C, graph, n.id, p, false, 0)];
+            PinKind ik = bpEffKind(C, graph, n.id, p, false, 0);
+            // an unconnected wildcard pin already belongs to the promoted type:
+            // plugging a Vector into A turns B yellow too, as in Unreal
+            if (ik == PIN_ANY && isWildcardMathPin(n.def, p)) ik = bpEffKind(C, graph, n.id, 0, true, 0);
+            Vec3 pc = PIN_COLORS[ik];
             if (d.ins[p].kind == PIN_EXEC) r->drawTriPx(px - ps, py - 6 * Z, px + 6 * Z, py, px - ps, py + 6 * Z, pc, 1);
             else r->drawRectPx(px - ps, py - ps, 2 * ps, 2 * ps, pc, 1);
             r->drawTextLine(px + 10 * Z, py - 8 * Z, d.ins[p].name, { 0.78f, 0.82f, 0.88f }, 1, Z);
@@ -8111,6 +8161,9 @@ void BPEditor::draw(UI& ui) {
                 if (!pureNode) return false;
             }
             if (palLinkMode && contextSensitive && firstCompatiblePin(DEFS[t], palLinkKind, palLinkOut) < 0) return false;
+            // a wire carrying a Transform (or any other non-numeric value) must not
+            // offer Add/Multiply/...: the node cannot compute on it
+            if (palLinkMode && palLinkOut && isWildcardMath(t) && !bpMathAcceptsKind(palLinkKind)) return false;
             return true;
         };
         for (int cat = 0; cat < BP_NCATS + 3 && !searching; cat++) {
@@ -8282,8 +8335,12 @@ void BPEditor::draw(UI& ui) {
                         BPNodeDef createdDef = effDef(*C.byId(nid));
                         int p = firstCompatiblePin(createdDef, palLinkKind, palLinkOut);
                         if (p >= 0) {
-                            if (palLinkOut) C.connect(palLinkNode, palLinkPin, nid, p);
-                            else C.connect(nid, p, palLinkNode, palLinkPin);
+                            if (palLinkOut) {
+                                if (mathLinkAllowed(C, graph, palLinkNode, palLinkPin, nid, p))
+                                    C.connect(palLinkNode, palLinkPin, nid, p);
+                            } else if (mathLinkAllowed(C, graph, nid, p, palLinkNode, palLinkPin)) {
+                                C.connect(nid, p, palLinkNode, palLinkPin);
+                            }
                         }
                         palLinkMode = false;
                     }

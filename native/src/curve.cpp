@@ -89,6 +89,8 @@ bool CurveEditor::loadFrom(const std::string& absPath, const std::string& rel) {
 }
 
 bool CurveEditor::save() {
+    extern bool gEditorProjectWritesAllowed;
+    if (!gEditorProjectWritesAllowed) return false;
     if (curPath.empty() || projectDir.empty()) return false;
     std::ofstream f(projectDir + "\\" + curPath, std::ios::binary);
     if (!f) return false;

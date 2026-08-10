@@ -16,6 +16,14 @@ struct DrawItem {
     bool castShadow = true;
     bool doubleSided = false;
     GLuint albedoTex = 0;      // material base-colour texture (triplanar); 0 = none
+    // ── material shading options ──
+    bool unlit = false;        // skip every light: the base colour is the output
+    bool additive = false;     // translucent pass blends with ONE instead of 1-src alpha
+    // Emission is `emissive` (intensity) times a colour. Unless a material gives
+    // one, that colour is the surface's own base colour — the engine's original
+    // behaviour, kept so entities without a material look unchanged.
+    bool emissiveTinted = false;
+    Vec3 emissiveColor = { 1, 1, 1 };
 };
 
 // Local-space bounds of each primitive, centred on the origin (half-extents).
@@ -45,6 +53,30 @@ struct Env {
 
 struct LineVert { Vec3 p; Vec3 c; };
 
+// ─── post process ───
+// Grading runs on the finished (tone-mapped) image, so these are display-space
+// controls: everything at its default value is an exact no-op and the post pass
+// is skipped entirely.
+struct PostSettings {
+    float exposure = 1.0f;        // overall gain
+    float contrast = 1.0f;
+    float saturation = 1.0f;
+    Vec3 tint = { 1, 1, 1 };      // colour multiplied into the image
+    float vignette = 0.0f;        // 0 none .. 1 heavy corners
+    float bloomThreshold = 1.0f;  // brightness a pixel must pass to bleed
+    float bloomIntensity = 0.0f;  // 0 = no bloom
+    float chromaticAberration = 0.0f;  // px of R/B separation at the edges
+    float grain = 0.0f;           // film grain strength
+    float time = 0.0f;            // animates the grain
+
+    bool isNeutral() const {
+        return exposure == 1.0f && contrast == 1.0f && saturation == 1.0f &&
+               tint.x == 1.0f && tint.y == 1.0f && tint.z == 1.0f &&
+               vignette <= 0.0f && bloomIntensity <= 0.0f &&
+               chromaticAberration <= 0.0f && grain <= 0.0f;
+    }
+};
+
 struct Frame {
     std::vector<DrawItem> items;
     std::vector<DrawItem> overlay;      // drawn on top with cleared depth (gizmo)
@@ -56,6 +88,7 @@ struct Frame {
     Env env;
     Vec3 shadowCenter;
     bool showGrid = true;               // floor grid (hidden in Play)
+    PostSettings post;                  // neutral by default = no post pass
 };
 
 struct OrbitCamera {
@@ -134,8 +167,12 @@ private:
     struct Program { GLuint id = 0; GLint u(const char* name) const { return glGetUniformLocation(id, name); } };
 
     Mesh meshes_[MESH_COUNT];
-    Program lit_, depth_, sky_, grid_, line_, text_, image_;
+    Program lit_, depth_, sky_, grid_, line_, text_, image_, post_;
     GLuint shadowTex_ = 0, shadowFbo_ = 0;
+    // offscreen scene target, only allocated once a frame actually asks for post
+    GLuint sceneFbo_ = 0, sceneTex_ = 0, sceneDepth_ = 0;
+    int sceneTexW_ = 0, sceneTexH_ = 0;
+    bool ensureSceneTarget(int w, int h);   // false = post cannot run this frame
     GLuint screenVao_ = 0, gridVao_ = 0;
     GLuint lineVao_ = 0, lineVbo_ = 0;
     GLuint fontTex_ = 0, textVao_ = 0, textVbo_ = 0;

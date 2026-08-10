@@ -1202,6 +1202,8 @@ bool WidgetEditor::loadFrom(const std::string& absPath, const std::string& rel) 
     return true;
 }
 bool WidgetEditor::save() {
+    extern bool gEditorProjectWritesAllowed;
+    if (!gEditorProjectWritesAllowed) return false;
     if (curPath.empty() || projectDir.empty()) return false;
     std::ofstream f(projectDir + "\\" + curPath, std::ios::binary);
     if (!f) return false;
@@ -1468,7 +1470,7 @@ void WidgetEditor::draw(UI& ui) {
             r->drawRectPx(rc.x, rc.y, rc.w, rc.h, on ? Vec3{ 0.12f, 0.32f, 0.56f }
                                                 : over ? Vec3{ 0.20f, 0.23f, 0.28f } : Vec3{ 0.145f, 0.155f, 0.19f }, 1);
             if (on) r->drawRectPx(rc.x, rc.y + rc.h - 2, rc.w, 2, { 0.30f, 0.62f, 0.99f }, 1);
-            r->drawTextLine(rc.x + (rc.w - r->textWidth(modes[i])) * 0.5f, rc.y + (rc.h - 12) * 0.5f, modes[i],
+            r->drawTextLine(rc.x + (rc.w - r->textWidth(modes[i])) * 0.5f, ui.textCenterY(rc), modes[i],
                             on ? Vec3{ 0.85f, 0.93f, 1.0f } : Vec3{ 0.68f, 0.73f, 0.81f }, 1);
             if (over && in.mousePressed) graphMode = (i == 1);
         }
@@ -2105,7 +2107,7 @@ void WidgetEditor::draw(UI& ui) {
         const float box = 15;
         r->drawRectPx(rc.x, rc.y + 3, box, box, over ? Vec3{ 0.22f, 0.24f, 0.28f } : Vec3{ 0.17f, 0.185f, 0.215f }, 1);
         if (value) r->drawRectPx(rc.x + 3, rc.y + 6, box - 6, box - 6, { 0.30f, 0.62f, 0.99f }, 1);
-        r->drawTextLine(rc.x + box + 8, rc.y + 3, lbl, { 0.85f, 0.88f, 0.93f }, 1);
+        r->drawTextLine(rc.x + box + 8, ui.textCenterY(rc), lbl, { 0.85f, 0.88f, 0.93f }, 1);
         return over && in.mousePressed;
     };
     if (!sn) {
@@ -2156,9 +2158,9 @@ void WidgetEditor::draw(UI& ui) {
             Vec3 boxCol = value ? Vec3{ 0.30f, 0.62f, 0.99f } : Vec3{ 0.28f, 0.31f, 0.37f };
             r->drawRectPx(rc.x + 5, rc.y + 5, 12, 12, boxCol, 1);
             if (value) r->drawRectPx(rc.x + 8, rc.y + 8, 6, 6, { 0.06f, 0.09f, 0.13f }, 1);
-            r->drawTextLine(rc.x + 24, rc.y + 4, lbl, { 0.85f, 0.89f, 0.95f }, 1);
+            r->drawTextLine(rc.x + 24, ui.textCenterY(rc), lbl, { 0.85f, 0.89f, 0.95f }, 1);
             const char* state = value ? onText : offText;
-            r->drawTextLine(rc.x + rc.w - r->textWidth(state) - 8, rc.y + 4, state, { 0.55f, 0.60f, 0.68f }, 1);
+            r->drawTextLine(rc.x + rc.w - r->textWidth(state) - 8, ui.textCenterY(rc), state, { 0.55f, 0.60f, 0.68f }, 1);
             dy += ROW_H + GAP;
             return over && in.mousePressed;
         };
@@ -2174,10 +2176,10 @@ void WidgetEditor::draw(UI& ui) {
             bool over = !ui.interactionBlocked() && in.mouseX >= rc.x && in.mouseX < rc.x + rc.w &&
                         in.mouseY >= rc.y && in.mouseY < rc.y + rc.h;
             r->drawRectPx(rc.x, rc.y, rc.w, rc.h, over ? Vec3{ 0.20f, 0.24f, 0.30f } : Vec3{ 0.15f, 0.16f, 0.20f }, 1);
-            r->drawTextLine(rc.x + 6, rc.y + 4, lbl, { 0.85f, 0.89f, 0.95f }, 1);
+            r->drawTextLine(rc.x + 6, ui.textCenterY(rc), lbl, { 0.85f, 0.89f, 0.95f }, 1);
             const char* v = names[value < 0 || value >= count ? 0 : value];
             float ax = rc.x + rc.w - 12, ay = rc.y + rc.h * 0.5f;         // ▼
-            r->drawTextLine(ax - 10 - r->textWidth(v), rc.y + 4, v, { 0.85f, 0.89f, 0.95f }, 1);
+            r->drawTextLine(ax - 10 - r->textWidth(v), ui.textCenterY(rc), v, { 0.85f, 0.89f, 0.95f }, 1);
             r->drawTriPx(ax - 4, ay - 2, ax + 4, ay - 2, ax, ay + 3, { 0.62f, 0.68f, 0.78f }, 1);
             if (over && in.mousePressed) ui.openEnumPicker(fid, value, names, count, rc.x, rc.y + ROW_H + 2, rc.w);
             dy += ROW_H + GAP;
@@ -2203,7 +2205,7 @@ void WidgetEditor::draw(UI& ui) {
             r->drawRectPx(rc.x, rc.y, 38, 1, { 0.35f, 0.4f, 0.48f }, 0.8f);
             bool over = !ui.interactionBlocked() && in.mouseX >= rc.x && in.mouseX < rc.x + rc.w &&
                         in.mouseY >= rc.y && in.mouseY < rc.y + rc.h;
-            r->drawTextLine(rc.x + 46, rc.y + 4, ui.ellipsize(label, rc.w - 54),
+            r->drawTextLine(rc.x + 46, ui.textCenterY(rc), ui.ellipsize(label, rc.w - 54),
                             over ? Vec3{ 0.95f, 0.97f, 1.0f } : Vec3{ 0.8f, 0.84f, 0.9f }, 1);
             if (over && in.mousePressed) ui.openColorPicker(pid, rgb, alpha, rc.x, rc.y + ROW_H + 4);
             dy += ROW_H + GAP;
@@ -2331,7 +2333,7 @@ void WidgetEditor::draw(UI& ui) {
                                      widget.find(sn->parent)->value < 0.5f);
                     UIRect rc = { RX, dy, RW, ROW_H };
                     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, { 0.15f, 0.16f, 0.20f }, 1);
-                    r->drawTextLine(rc.x + 6, rc.y + 4, "Size", { 0.85f, 0.89f, 0.95f }, 1);
+                    r->drawTextLine(rc.x + 6, ui.textCenterY(rc), "Size", { 0.85f, 0.89f, 0.95f }, 1);
                     bool fills = sn->sizeRule == WSR_FILL;
                     const float segW = 42, wgtW = 46;
                     float sx0 = rc.x + rc.w - wgtW - GAP - segW * 2 - 2;
