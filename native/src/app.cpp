@@ -18,6 +18,9 @@
 #include "widget.h"
 #include "animation.h"
 #include "audio.h"
+#include "live_session.h"
+#include "engine_update.h"
+#include "engine_version.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -303,6 +306,20 @@ struct App {
     bool settingsWindowOpen = false;
     int settingsCategory = 0;                  // 0 Generali, 1 Fisica, 2 Rendering, 3 Lingua
 
+    // Live collaboration. Guests edit an in-memory replica; only the host is
+    // allowed to persist the canonical scene in the project directory.
+    LiveSession live;
+    bool liveWindowOpen = false;
+    char liveDisplayName[40] = "Developer";
+    char liveJoinCode[12] = "";
+    std::string liveLastScene;
+    std::string livePendingScene;
+    std::string liveProjectProgress;
+    bool liveRemoteProject = false;
+    EngineUpdater updater;
+    bool updateNotificationShown = false;
+    uint64_t nextAutomaticUpdateCheck = 0;
+
     // Windows build settings. Scene order is also the runtime order; the first
     // included scene is the startup level of the packaged prototype.
     bool buildWindowOpen = false;
@@ -378,6 +395,7 @@ struct App {
     std::vector<std::string> projectMeshAssets;
     std::vector<std::string> projectMaterialAssets;
     std::vector<std::string> projectWidgetAssets;
+    std::vector<std::string> projectTextureAssets;   // .png anywhere under the project
     std::vector<std::string> curAudioClasses, curAudioAttenuations, curAudioConcurrencies;
     std::vector<std::string> curEnums;
     std::vector<std::string> curMaterials;
@@ -431,7 +449,6 @@ struct App {
     // per-frame layout of the top-level cards, filled while the Details panel draws
     struct DetailCardBox { int kind; int bpIndex; float y, h; };
     std::vector<DetailCardBox> detailCards;
-    std::string assetFieldOpen;               // id of the open big asset-picker dropdown
     int componentResetMenuEntity = 0;
     int componentResetMenuKind = -1;
     float componentResetMenuX = 0, componentResetMenuY = 0;
@@ -513,10 +530,99 @@ struct App {
 };
 
 static App g;
+// Asset editor modules consult this before touching disk. Live guests may edit
+// their in-memory working copies, but the host exclusively owns persistence.
+bool gEditorProjectWritesAllowed = true;
 static void addLog(int level, const char* fmt, ...);
 static void restoreAnimationPreview();
 static void applyAnimationPreview(float time);
 static void animationClearKeySelection();
+static void setClipboardText(const std::string& s);
+static void openProjectAt(const std::string& dir, const std::string& lastLevelRel);
+static void drawHelpContent(UI& ui);
+
+static void openHelpPanel() {
+    if (DockWindow* help = g.dock.find("help")) {
+        help->open = true;
+        g.dock.setActive("help");
+    }
+}
+
+static bool isLiveGuest() { return g.live.role() == LiveSession::Role::Guest; }
+
+static void updateLiveSession() {
+    g.live.update();
+    gEditorProjectWritesAllowed = !isLiveGuest();
+    LiveSession::Event event;
+    while (g.live.pollEvent(event)) {
+        switch (event.type) {
+        case LiveSession::EventType::Joined:
+            addLog(1, "%s joined the live session.", event.text.c_str());
+            if (g.live.role() == LiveSession::Role::Host)
+                g.live.sendSceneTo(event.peerId, g.scene.serialize());
+            break;
+        case LiveSession::EventType::Left:
+            addLog(0, "A developer left the live session.");
+            break;
+        case LiveSession::EventType::SceneSnapshot:
+            if (isLiveGuest()) {
+                if (g.inHub) {
+                    // A Hub join receives the canonical scene immediately while
+                    // the (usually larger) project asset stream is still arriving.
+                    g.livePendingScene = event.text;
+                } else if (g.scene.deserialize(event.text)) {
+                    if (g.selectedId && !g.scene.byId(g.selectedId)) g.selectedId = 0;
+                    g.navigation.baked = false;
+                    g.navigation.cells.clear();
+                } else addLog(2, "The host sent an invalid scene snapshot.");
+            }
+            break;
+        case LiveSession::EventType::SceneProposal:
+            if (g.live.role() == LiveSession::Role::Host) {
+                std::string before = g.scene.serialize();
+                if (g.scene.deserialize(event.text)) {
+                    if (g.selectedId && !g.scene.byId(g.selectedId)) g.selectedId = 0;
+                    g.navigation.baked = false;
+                    g.navigation.cells.clear();
+                    g.live.broadcastScene(g.scene.serialize());
+                } else {
+                    g.scene.deserialize(before);
+                    g.live.sendSceneTo(event.peerId, before);
+                    addLog(2, "Rejected an invalid scene update from a live guest.");
+                }
+            }
+            break;
+        case LiveSession::EventType::Error:
+            addLog(2, "Live session: %s", event.text.c_str());
+            break;
+        case LiveSession::EventType::ProjectProgress:
+            g.liveProjectProgress = event.text;
+            break;
+        case LiveSession::EventType::ProjectReady: {
+            g.liveRemoteProject = true;
+            std::string projectRoot = event.text;
+            std::string level = g.live.remoteCurrentLevel();
+            openProjectAt(projectRoot, level);
+            if (!g.live.remoteProjectName().empty()) g.projectName = g.live.remoteProjectName();
+            if (!g.livePendingScene.empty()) {
+                if (!g.scene.deserialize(g.livePendingScene)) addLog(2, "Could not open the host's live scene.");
+                g.livePendingScene.clear();
+            }
+            g.liveProjectProgress.clear();
+            addLog(1, "Remote project ready: %s", g.projectName.c_str());
+            break;
+        }
+        }
+    }
+}
+
+static void syncLiveSceneChange(const std::string& before) {
+    if (before.empty() || g.mode != Mode::Edit || !g.live.connected()) return;
+    std::string after = g.scene.serialize();
+    if (after == before) return;
+    if (g.live.role() == LiveSession::Role::Host) g.live.broadcastScene(after);
+    else if (g.live.role() == LiveSession::Role::Guest) g.live.proposeScene(after);
+}
 
 static void clearSceneHistory() {
     g.sceneUndoHistory.clear();
@@ -759,7 +865,7 @@ static void scanBrowser() {
             else if (ext == ".atten") g.curAudioAttenuations.push_back(name);
             else if (ext == ".concurrency") g.curAudioConcurrencies.push_back(name);
             else if (ext == ".enum") g.curEnums.push_back(name);
-            else if (ext == ".mat") g.curMaterials.push_back(name);
+            else if (ext == ".mat" || ext == ".matinst") g.curMaterials.push_back(name);
             else if (ext == ".wgt") g.curWidgets.push_back(name);
         }
     }
@@ -783,19 +889,22 @@ static void scanBrowser() {
     g.projectMeshAssets.clear();
     g.projectMaterialAssets.clear();
     g.projectWidgetAssets.clear();
+    g.projectTextureAssets.clear();
     for(const auto& asset:fs::recursive_directory_iterator(g.projectDir,fs::directory_options::skip_permission_denied,ec)){
         if(!asset.is_regular_file())continue;
         std::string ext=asset.path().extension().string();
         std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return(char)tolower(c);});
         std::error_code relError;fs::path rel=fs::relative(asset.path(),g.projectDir,relError);
-        if(ext==".mat"){ if(!relError)g.projectMaterialAssets.push_back(rel.string()); continue; }
+        if(ext==".mat"||ext==".matinst"){ if(!relError)g.projectMaterialAssets.push_back(rel.string()); continue; }
         if(ext==".wgt"){ if(!relError)g.projectWidgetAssets.push_back(rel.string()); continue; }
+        if(ext==".png"){ if(!relError)g.projectTextureAssets.push_back(rel.string()); continue; }
         if(ext!=".obj"&&ext!=".fbx"&&ext!=".gltf"&&ext!=".glb"&&ext!=".dae"&&ext!=".3ds"&&ext!=".stl")continue;
         if(!relError)g.projectMeshAssets.push_back(rel.string());
     }
     std::sort(g.projectMeshAssets.begin(),g.projectMeshAssets.end());
     std::sort(g.projectMaterialAssets.begin(),g.projectMaterialAssets.end());
     std::sort(g.projectWidgetAssets.begin(),g.projectWidgetAssets.end());
+    std::sort(g.projectTextureAssets.begin(),g.projectTextureAssets.end());
     g.bpEditCache.clear();
     g.curveCache.clear();
     g.audioClassCache.clear();
@@ -1008,6 +1117,8 @@ static int openMaterialDoc(const std::string& absPath, const std::string& rel) {
     auto ed = std::make_unique<MaterialEditor>();
     ed->projectDir = g.projectDir;
     ed->logFn = addLog;
+    ed->textureAssets = &g.projectTextureAssets;
+    ed->materialAssets = &g.projectMaterialAssets;
     if (!ed->loadFrom(absPath, rel)) { addLog(2, "Could not open the Material: %s", rel.c_str()); return -1; }
     g.materialDocs.push_back(std::move(ed));
     g.activeDoc = materialDocBase() + (int)g.materialDocs.size() - 1;
@@ -3127,6 +3238,74 @@ static void updatePlayCamera(float dt) {
     }
 }
 
+// ── camera preview (Unreal-style picture-in-picture) ──
+// While a camera object is selected in Edit mode the viewport shows what that
+// camera sees, pinned to its bottom-right corner.
+static PostSettings resolvePostProcessAt(const Vec3& view);   // defined with the volumes
+static const Entity* selectedCameraForPreview() {
+    if (g.inHub || g.prefabEditMode || g.mode != Mode::Edit || g.activeDoc != 0) return nullptr;
+    const Entity* e = g.scene.byId(g.selectedId);
+    return (e && e->isCamera && e->body) ? e : nullptr;
+}
+
+static UIRect cameraPreviewRect(const UIRect& viewport) {
+    const float MARGIN = 12;
+    float w = clampf(viewport.w * 0.26f, 180.0f, 420.0f);
+    float h = w * 9.0f / 16.0f;
+    if (h > viewport.h * 0.45f) { h = viewport.h * 0.45f; w = h * 16.0f / 9.0f; }
+    return { viewport.x + viewport.w - w - MARGIN, viewport.y + viewport.h - h - MARGIN, w, h };
+}
+
+// Renders the preview over the viewport that was just drawn, then paints its
+// frame and caption straight away so nothing else can land between the two.
+static void renderCameraPreview(const Frame& frame, const UIRect& viewport) {
+    const Entity* cam = selectedCameraForPreview();
+    if (!cam || viewport.w < 320 || viewport.h < 220) return;
+    UIRect pv = cameraPreviewRect(viewport);
+    if (pv.w < 60 || pv.h < 40) return;
+
+    OrbitCamera view;
+    view.fpActive = true;
+    view.fpEye = cam->body->position + Vec3{ 0, cam->camOffsetY, 0 };
+    view.fpRot = cam->body->quat;
+    view.fpFov = cam->camFov;
+    view.nearZ = cam->camLinearClipping ? clampf(cam->camNearClip, .001f, 1000.0f) : .1f;
+    view.farZ = cam->camLinearClipping ? (std::max)(view.nearZ + .01f, cam->camClipDistance) : 500.0f;
+    view.update(pv.w / pv.h);
+
+    // The preview is the camera's own view: no editor gizmos, no floor grid, and
+    // the culling mask it would use in Play.
+    Frame preview = frame;
+    preview.overlay.clear();
+    preview.linesDepth.clear();
+    preview.linesOverlay.clear();
+    preview.linesOverlayThick.clear();
+    preview.trianglesDepth.clear();
+    preview.showGrid = false;
+    // graded from where THIS camera stands, not from the editor's viewpoint
+    preview.post = cam->camPostProcess ? resolvePostProcessAt(view.fpEye) : PostSettings();
+
+    Renderer* r = &g.renderer;
+    r->flushUI();   // the batch must not be drawn over the preview afterwards
+    r->render(preview, view, (int)pv.x, (int)pv.y, (int)pv.w, (int)pv.h, false);
+
+    const Vec3 border{ 0.30f, 0.62f, 0.99f };
+    r->drawRectPx(pv.x - 1, pv.y - 1, pv.w + 2, 1, border, 0.9f);
+    r->drawRectPx(pv.x - 1, pv.y + pv.h, pv.w + 2, 1, border, 0.9f);
+    r->drawRectPx(pv.x - 1, pv.y - 1, 1, pv.h + 2, border, 0.9f);
+    r->drawRectPx(pv.x + pv.w, pv.y - 1, 1, pv.h + 2, border, 0.9f);
+    r->drawRectPx(pv.x, pv.y, pv.w, 20, { 0.06f, 0.07f, 0.09f }, 0.72f);
+    char caption[96];
+    snprintf(caption, sizeof(caption), "%s  |  FOV %.0f%s", cam->name, cam->camFov,
+             cam->camPostProcess ? "" : "  |  no post");
+    // trimmed with the renderer directly: this runs before UI::begin on the very
+    // first frame, so g.ui has no renderer yet
+    std::string shown = caption;
+    while (!shown.empty() && r->textWidth(shown) > pv.w - 14) shown.pop_back();
+    r->drawTextLine(pv.x + 7, pv.y + 2, shown, { 0.85f, 0.9f, 0.97f }, 1);
+    r->flushUI();
+}
+
 // Edit-mode fly navigation: hold RMB in a viewport (main or popped-out), then
 // WASD moves, Q/E drop/rise, Shift = faster. Speed scales with zoom so it stays
 // usable whether you're close in or way out. Runs before camera.update().
@@ -4022,6 +4201,79 @@ static void appendAudioSourceGizmo(std::vector<LineVert>& lines, const Entity& e
     }
 }
 
+// A Post Process Volume is a box regardless of the object's mesh: its extent is
+// the entity's own transform scaled to a unit cube.
+static void appendVolumeBox(std::vector<LineVert>& lines, const Entity& e, const Vec3& color) {
+    auto world = [&](Vec3 p) {
+        p = { p.x * e.scale.x, p.y * e.scale.y, p.z * e.scale.z };
+        return e.body->quat.rotate(p) + e.body->position;
+    };
+    Vec3 c[8];
+    for (int i = 0; i < 8; i++) c[i] = { (i & 1) ? .5f : -.5f, (i & 2) ? .5f : -.5f, (i & 4) ? .5f : -.5f };
+    const int edges[12][2] = { {0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7} };
+    for (const auto& edge : edges) {
+        lines.push_back({ world(c[edge[0]]), color });
+        lines.push_back({ world(c[edge[1]]), color });
+    }
+}
+
+// world point inside the volume's box (an unbound volume contains everything)
+static bool postVolumeContains(const Entity& e, const Vec3& p) {
+    if (e.ppUnbound) return true;
+    if (!e.body) return false;
+    Vec3 local = e.body->quat.conjugate().rotate(p - e.body->position);
+    Vec3 half = { fabsf(e.scale.x) * 0.5f, fabsf(e.scale.y) * 0.5f, fabsf(e.scale.z) * 0.5f };
+    return fabsf(local.x) <= (std::max)(half.x, 1e-4f) &&
+           fabsf(local.y) <= (std::max)(half.y, 1e-4f) &&
+           fabsf(local.z) <= (std::max)(half.z, 1e-4f);
+}
+
+// The view the volumes are tested against: the scene camera's eye in Play,
+// otherwise wherever the editor camera is looking from.
+static Vec3 postProcessViewPosition() {
+    if (g.mode == Mode::Play && !g.flyActive)
+        for (const Entity& e : g.scene.entities)
+            if (e.isCamera && e.body) return e.body->position + Vec3{ 0, e.camOffsetY, 0 };
+    return g.camera.fpActive ? g.camera.fpEye : g.camera.eye;
+}
+
+// Blends every volume containing `view`, weakest priority first, so a
+// higher-priority volume ends up dominating exactly like Unreal's.
+static PostSettings resolvePostProcessAt(const Vec3& view) {
+    PostSettings result;
+    std::vector<const Entity*> volumes;
+    for (const Entity& e : g.scene.entities)
+        if (e.hasPostProcess && e.ppBlendWeight > 0.0f && postVolumeContains(e, view)) volumes.push_back(&e);
+    std::stable_sort(volumes.begin(), volumes.end(),
+                     [](const Entity* a, const Entity* b) { return a->ppPriority < b->ppPriority; });
+    for (const Entity* v : volumes) {
+        float w = clampf(v->ppBlendWeight, 0.0f, 1.0f);
+        const PostSettings& s = v->ppSettings;
+        auto mix = [&](float a, float b) { return a + (b - a) * w; };
+        result.exposure = mix(result.exposure, s.exposure);
+        result.contrast = mix(result.contrast, s.contrast);
+        result.saturation = mix(result.saturation, s.saturation);
+        result.tint = { mix(result.tint.x, s.tint.x), mix(result.tint.y, s.tint.y), mix(result.tint.z, s.tint.z) };
+        result.vignette = mix(result.vignette, s.vignette);
+        result.bloomThreshold = mix(result.bloomThreshold, s.bloomThreshold);
+        result.bloomIntensity = mix(result.bloomIntensity, s.bloomIntensity);
+        result.chromaticAberration = mix(result.chromaticAberration, s.chromaticAberration);
+        result.grain = mix(result.grain, s.grain);
+    }
+    result.time = (float)g.playTime;
+    return result;
+}
+
+// What the view being rendered into the main viewport is graded with. A scene
+// camera that switched Post Process off gets the raw image.
+static PostSettings resolvePostProcess() {
+    if (g.mode == Mode::Play && !g.flyActive) {
+        for (const Entity& e : g.scene.entities)
+            if (e.isCamera) { if (!e.camPostProcess) return PostSettings(); break; }
+    }
+    return resolvePostProcessAt(postProcessViewPosition());
+}
+
 static void appendWorldSphere(std::vector<LineVert>& lines, const Vec3& center, float radius, const Vec3& color) {
     const int segments = 40;
     if (radius <= 0.001f) return;
@@ -4062,7 +4314,19 @@ static void resolveMaterial(const std::string& rel, MaterialEval& ev, GLuint& te
     auto it = g.materialCache.find(rel);
     if (it == g.materialCache.end()) {
         MaterialAsset a; std::string data;
-        if (readFile(g.projectDir + "\\" + rel, data)) a.deserialize(data);
+        if (readFile(g.projectDir + "\\" + rel, data)) {
+            if (matTextIsInstance(data)) {
+                // an instance is the parent's graph with its parameters replaced;
+                // the cache stores the already-resolved result
+                MaterialInstance mi;
+                std::string parentData;
+                if (mi.deserialize(data) && mi.parent[0] &&
+                    readFile(g.projectDir + "\\" + mi.parent, parentData) && a.deserialize(parentData))
+                    matApplyInstance(a, mi);
+            } else {
+                a.deserialize(data);
+            }
+        }
         it = g.materialCache.emplace(rel, a).first;
     }
     ev = it->second.evaluate();
@@ -4089,6 +4353,8 @@ static void buildFrame(Frame& f) {
     f.env.fogDensity = g.fogDensity;
     f.env.shadowStrength = g.shadowStrength;
     f.showGrid = g.showGrid && g.mode == Mode::Edit;   // debug hidden in Play
+    // Prefab Mode is a neutral workspace, so the level's volumes stay out of it
+    f.post = g.prefabEditMode ? PostSettings() : resolvePostProcess();
     if(g.prefabEditMode){
         // Prefab Mode is an isolated local workspace, not a level: use a
         // uniform neutral studio background and hide the world floor grid.
@@ -4116,14 +4382,21 @@ static void buildFrame(Frame& f) {
             it.checker = e.checker;
             it.emissive = e.emissive;
             it.doubleSided = e.doubleSided;
+            bool masked = false;
             if (e.materialAsset[0]) {   // assigned material overrides the inline surface params
                 MaterialEval ev; GLuint tex = 0;
                 resolveMaterial(e.materialAsset, ev, tex);
-                applyMaterialEval(ev, it.color, it.specular, it.shininess, it.emissive);
+                bool entityDoubleSided = it.doubleSided;
+                float entityAlpha = it.opacity;
+                applyMaterialEval(ev, it);
+                // the object's own alpha still dims whatever the material decided
+                it.opacity *= entityAlpha;
+                it.doubleSided = it.doubleSided || entityDoubleSided;
                 if (g.mode == Mode::Play && e.body->sleeping) it.color = it.color * 0.72f;
                 it.albedoTex = tex;
+                masked = ev.fullyMasked();   // Masked, and the mask folds below the clip
             }
-            f.items.push_back(it);
+            if (!masked) f.items.push_back(it);
         }
         if (e.isLight && layerVisible) {
             f.lights.push_back({ e.body->position, e.lightColor * e.lightIntensity, e.lightRange });
@@ -4149,6 +4422,10 @@ static void buildFrame(Frame& f) {
         if (!g.prefabEditMode && g.mode == Mode::Edit && g.showGizmo && e.hasReverb)
             appendWorldSphere(f.linesDepth, e.body->position, e.reverbRadius,
                               sceneEntitySelected(e.id) ? Vec3{ .82f, .38f, 1.0f } : Vec3{ .42f, .20f, .55f });
+        // an unbound volume has no box to show: it grades the whole level
+        if (!g.prefabEditMode && g.mode == Mode::Edit && g.showGizmo && e.hasPostProcess && !e.ppUnbound)
+            appendVolumeBox(f.linesDepth, e,
+                            sceneEntitySelected(e.id) ? Vec3{ .38f, .95f, .82f } : Vec3{ .18f, .52f, .46f });
         if (!g.prefabEditMode && g.navigation.show && g.showGizmo && e.hasAIAgent && e.aiDebugDraw && e.aiPath.size() > 1) {
             Vec3 previous = e.body->position;
             for (int i = e.aiPathIndex; i < (int)e.aiPath.size(); i++) {
@@ -4227,6 +4504,24 @@ static void buildFrame(Frame& f) {
         });
     }
 
+    // Live developers are editor-only presence objects, never scene entities:
+    // they cannot be selected, serialized, simulated, or accidentally saved.
+    if (g.mode == Mode::Edit && !g.prefabEditMode) for (const LiveSession::Peer& peer : g.live.peers()) {
+        if (!peer.cameraValid) continue;
+        Vec3 forward = peer.cameraTarget - peer.cameraPosition;
+        if (forward.lengthSq() < .0001f) forward = { 0, 0, -1 };
+        else forward = forward.normalized();
+        DrawItem head; head.mesh = MESH_SPHERE; head.color = peer.color; head.emissive = .18f;
+        head.model = Mat4::compose(peer.cameraPosition, {}, { .24f, .24f, .24f });
+        f.overlay.push_back(head);
+        DrawItem body; body.mesh = MESH_CAPSULE; body.color = peer.color * .72f; body.opacity = .88f;
+        body.model = Mat4::compose(peer.cameraPosition + Vec3{ 0, -.62f, 0 }, {}, { .32f, .55f, .32f });
+        f.overlay.push_back(body);
+        Vec3 lookEnd = peer.cameraPosition + forward * .85f;
+        f.linesOverlayThick.push_back({ peer.cameraPosition, peer.color });
+        f.linesOverlayThick.push_back({ lookEnd, peer.color });
+    }
+
     Entity* sel = g.scene.byId(g.selectedId);
     if (sel && g.mode == Mode::Edit && g.showGizmo) {
         appendSceneSelectionWires(f.linesOverlay);
@@ -4261,6 +4556,13 @@ static bool fileDialog(bool save, const char* filter, const char* defExt, char* 
 }
 
 static bool writeFile(const std::string& path, const std::string& data) {
+    if (!gEditorProjectWritesAllowed && !g.projectDir.empty() &&
+        path.size() >= g.projectDir.size() &&
+        _strnicmp(path.c_str(), g.projectDir.c_str(), g.projectDir.size()) == 0 &&
+        (path.size() == g.projectDir.size() || path[g.projectDir.size()] == '\\' || path[g.projectDir.size()] == '/')) {
+        addLog(2, "Live guest write blocked: %s", path.c_str());
+        return false;
+    }
     FILE* f = fopen(path.c_str(), "wb");
     if (!f) return false;
     fwrite(data.data(), 1, data.size(), f);
@@ -4321,6 +4623,7 @@ static bool saveEnumAsset() {
 }
 
 static void saveProject(bool forceDialog) {
+    if (isLiveGuest()) { addLog(2, "Live guests cannot write the project. Changes are committed by the host."); return; }
     if (g.mode == Mode::Play) { addLog(2, "Stop the simulation before saving."); return; }
     if(g.prefabEditMode){savePrefabEdit();return;}
     bool hadAnimationPreview = g.animationPreviewActive;
@@ -4535,7 +4838,7 @@ static void openProjectAt(const std::string& dir, const std::string& lastLevelRe
     gBPProjectDir = g.projectDir;
     g.projectName = fs::path(norm).filename().string();
     if (g.projectName.empty()) g.projectName = "progetto";
-    ensureProjectDirs(norm);
+    if (!g.liveRemoteProject) ensureProjectDirs(norm);
     loadGameplayProjectSettings();
     g.persistentGameInstanceVars.clear();
     g.curRel = "";
@@ -4553,7 +4856,7 @@ static void openProjectAt(const std::string& dir, const std::string& lastLevelRe
     g.camera.target = { 0, 2, 0 };
     g.camera.distance = 15;
     g.inHub = false;
-    hubAdd(norm, lastLevelRel);
+    if (!g.liveRemoteProject) hubAdd(norm, lastLevelRel);
     addLog(1, "Project opened: %s", g.projectName.c_str());
 }
 
@@ -4733,6 +5036,8 @@ static void hubConnectProject() {
 
 // save the current level path for the project, then show the hub again
 static void returnToHub() {
+    bool wasRemoteProject = g.liveRemoteProject;
+    g.live.stop();
     if (g.mode == Mode::Play) stopPlay();
     std::string rel;
     if (g.projectPath[0]) {
@@ -4740,7 +5045,7 @@ static void returnToHub() {
         if (abs.rfind(g.projectDir, 0) == 0 && abs.size() > g.projectDir.size() + 1)
             rel = abs.substr(g.projectDir.size() + 1);
     }
-    hubAdd(g.projectDir, rel);
+    if (!wasRemoteProject) hubAdd(g.projectDir, rel);
     g.bpDocs.clear();
     g.curveDocs.clear();
     g.materialDocs.clear();
@@ -4748,6 +5053,7 @@ static void returnToHub() {
     g.activeDoc = 0;
     g.inHub = true;
     g.hubScroll = 0;
+    g.liveRemoteProject = false;
 }
 
 // ═══ clipboard (Ctrl+C / Ctrl+V) ═══
@@ -5208,7 +5514,8 @@ static std::string refClassLabel(const char* refClass) {
 enum SceneComponentAdd {
     ADD_MESH, ADD_RIGID_BODY, ADD_TRIGGER, ADD_LIGHT, ADD_CAMERA,
     ADD_AUDIO, ADD_REVERB, ADD_AI_AGENT, ADD_NAV_OCCLUDER,
-    ADD_ANIMATOR, ADD_INSPECTOR_EVENTS, ADD_SIMPLE_SCRIPT, ADD_JOINT, ADD_CONSTRAINT
+    ADD_ANIMATOR, ADD_INSPECTOR_EVENTS, ADD_SIMPLE_SCRIPT, ADD_JOINT, ADD_CONSTRAINT,
+    ADD_POSTPROCESS
 };
 
 static bool addSceneComponent(Entity& e, int component, const std::string& blueprint = {}) {
@@ -5227,6 +5534,7 @@ static bool addSceneComponent(Entity& e, int component, const std::string& bluep
     case ADD_CAMERA: if (e.isCamera) return false; e.isCamera=true; break;
     case ADD_AUDIO: if (e.hasAudio) return false; e.hasAudio=true; break;
     case ADD_REVERB: if (e.hasReverb) return false; e.hasReverb=true; break;
+    case ADD_POSTPROCESS: if (e.hasPostProcess) return false; e.hasPostProcess=true; break;
     case ADD_AI_AGENT: if (e.hasAIAgent) return false; e.hasAIAgent=true;e.aiDestination=e.body->position; break;
     case ADD_NAV_OCCLUDER: if (e.hasNavigationOccluder) return false; e.hasNavigationOccluder=true;invalidateNavigation(); break;
     case ADD_ANIMATOR: if (e.hasAnimator) return false; e.hasAnimator=true;e.animatorController[0]=0;e.animatorPlayOnAwake=true;e.animatorSpeed=1; break;
@@ -5451,6 +5759,7 @@ static void drawOutlinerContent(UI& ui) {
         component("Rendering", "Mesh Renderer", ADD_MESH, contextEntity->hasMesh);
         component("Rendering", "Luce puntuale", ADD_LIGHT, contextEntity->isLight);
         component("Rendering", "Camera", ADD_CAMERA, contextEntity->isCamera);
+        component("Rendering", "Post Process Volume", ADD_POSTPROCESS, contextEntity->hasPostProcess);
         component("Physics", "Rigid Body", ADD_RIGID_BODY, contextEntity->hasPhysics);
         component("Physics", "Trigger", ADD_TRIGGER, contextEntity->hasTrigger);
         component("Physics", "Joint (nearest object)", ADD_JOINT, g.scene.entities.size()<2);
@@ -5698,7 +6007,11 @@ static void resetComponentDefaults(Entity& e, int kind) {
     case DETAIL_CAMERA:
         e.camFov = defaults.camFov; e.camOffsetY = defaults.camOffsetY;
         e.camLinearClipping=defaults.camLinearClipping; e.camNearClip=defaults.camNearClip;
-        e.camClipDistance=defaults.camClipDistance; e.camLayerMask=defaults.camLayerMask; break;
+        e.camClipDistance=defaults.camClipDistance; e.camLayerMask=defaults.camLayerMask;
+        e.camPostProcess=defaults.camPostProcess; break;
+    case DETAIL_POSTPROCESS:
+        e.ppSettings=defaults.ppSettings; e.ppUnbound=defaults.ppUnbound;
+        e.ppPriority=defaults.ppPriority; e.ppBlendWeight=defaults.ppBlendWeight; break;
     case DETAIL_AUDIO:
         g.audio.stop(e.id); e.audioClip[0]=e.audioClass[0]=e.audioAttenuation[0]=e.audioConcurrency[0]=0;
         e.audioVolume=defaults.audioVolume; e.audioLoop=defaults.audioLoop; e.audioPlayOnAwake=defaults.audioPlayOnAwake;
@@ -5789,71 +6102,16 @@ static void drawComponentResetMenu(UI& ui, Entity& e) {
 }
 
 // ── Unreal-style big asset picker field (mesh / material) ──
-struct AssetPick {
-    std::string label;          // display text
-    std::string iconImage;      // key into g.assetIconTextures (empty = none)
-    GLuint tex = 0;             // explicit texture (material albedo) — overrides iconImage
-    Vec3 swatch{ 0, 0, 0 };     // solid-colour thumbnail (material base colour)
-    bool useSwatch = false;
-};
+// The control itself lives on UI (the material editor uses it too); this wrapper
+// only places it in the panel's layout flow.
+using AssetPick = UIAssetOption;
 
-static void drawAssetThumb(Renderer* r, const AssetPick& p, float x, float y, float s) {
-    r->drawRectPx(x, y, s, s, { 0.06f, 0.07f, 0.09f }, 1);
-    if (p.tex) r->drawImagePx(p.tex, x + 2, y + 2, s - 4, s - 4, { 1, 1, 1 }, 1);
-    else if (p.useSwatch) r->drawRectPx(x + 3, y + 3, s - 6, s - 6, p.swatch, 1);
-    else if (!p.iconImage.empty()) {
-        auto it = g.assetIconTextures.find(p.iconImage);
-        if (it != g.assetIconTextures.end()) r->drawImagePx(it->second, x + 3, y + 3, s - 6, s - 6, { 1, 1, 1 }, 1);
-    }
-    Vec3 bd{ .30f, .34f, .40f };
-    r->drawRectPx(x, y, s, 1, bd, 1); r->drawRectPx(x, y + s - 1, s, 1, bd, 1);
-    r->drawRectPx(x, y, 1, s, bd, 1); r->drawRectPx(x + s - 1, y, 1, s, bd, 1);
-}
-
-// Draws a large field (thumbnail + name + dropdown arrow). Clicking opens a dropdown
-// listing every option (same width as the field, Unreal-style). Returns the newly
-// picked index into `options`, or -1 if nothing was picked this frame.
 static int drawAssetField(UI& ui, const char* fieldId, const char* label,
                           int current, const std::vector<AssetPick>& options) {
-    Renderer* r = ui.r;
-    const UIInput& in = ui.input();
     ui.label(label, { 0.55f, 0.59f, 0.66f });
-    const float H = 46, TH = H - 10;
-    UIRect rc = ui.allocRow(H);
-    auto inRect = [&](const UIRect& q) {
-        return in.mouseX >= q.x && in.mouseX < q.x + q.w && in.mouseY >= q.y && in.mouseY < q.y + q.h;
-    };
-    bool overField = inRect(rc);
-    r->drawRectPx(rc.x, rc.y, rc.w, rc.h, overField ? Vec3{ .17f, .19f, .23f } : Vec3{ .13f, .145f, .175f }, 1);
-    r->drawRectPx(rc.x, rc.y, rc.w, 1, { .28f, .32f, .40f }, .8f);
-    const AssetPick* cur = (current >= 0 && current < (int)options.size()) ? &options[current] : nullptr;
-    if (cur) drawAssetThumb(r, *cur, rc.x + 5, rc.y + 5, TH);
-    else r->drawRectPx(rc.x + 5, rc.y + 5, TH, TH, { .06f, .07f, .09f }, 1);
-    std::string name = cur ? cur->label : "None";
-    r->drawTextLine(rc.x + TH + 16, rc.y + H * 0.5f - 8, ui.ellipsize(name, rc.w - TH - 46), { .88f, .92f, .98f }, 1);
-
-    bool open = g.assetFieldOpen == fieldId;
-    r->drawTextLine(rc.x + rc.w - 18, rc.y + H * 0.5f - 8, open ? "^" : "v", { 0.30f, 0.62f, 0.99f }, 1);
-    if (overField && in.mousePressed) { g.assetFieldOpen = open ? std::string() : fieldId; open = !open; }
-
-    int picked = -1;
-    float blockBottom = rc.y + rc.h;
-    if (open) {
-        for (int i = 0; i < (int)options.size(); i++) {
-            UIRect irc = ui.allocRow(24);
-            blockBottom = irc.y + irc.h;
-            bool ihov = inRect(irc);
-            r->drawRectPx(irc.x, irc.y, irc.w, irc.h,
-                          i == current ? Vec3{ .12f, .24f, .40f } : (ihov ? Vec3{ .20f, .28f, .40f } : Vec3{ .10f, .11f, .135f }), 1);
-            drawAssetThumb(r, options[i], irc.x + 3, irc.y + 3, 18);
-            r->drawTextLine(irc.x + 28, irc.y + 4, ui.ellipsize(options[i].label, irc.w - 40), { .85f, .9f, .97f }, 1);
-            if (ihov && in.mousePressed) { picked = i; g.assetFieldOpen.clear(); }
-        }
-        // click anywhere outside the field+dropdown closes it
-        bool insideBlock = in.mouseX >= rc.x && in.mouseX < rc.x + rc.w && in.mouseY >= rc.y && in.mouseY < blockBottom;
-        if (in.mousePressed && picked < 0 && !insideBlock) g.assetFieldOpen.clear();
-    }
-    return picked;
+    const float H = 46;
+    UIRect block = ui.allocRow(ui.assetFieldHeight(fieldId, H, (int)options.size()));
+    return ui.assetFieldRect(fieldId, { block.x, block.y, block.w, H }, current, options);
 }
 
 static void drawDetailsContent(UI& ui) {
@@ -6255,6 +6513,7 @@ static void drawDetailsContent(UI& ui) {
                 if(ui.dragFloat("Far Distance",&e.camClipDistance,.5f,.011f,100000.0f))
                     e.camClipDistance=(std::max)(e.camClipDistance,e.camNearClip+.01f);
             }
+            ui.checkbox("Post Process", &e.camPostProcess);
             ui.header("CULLING LAYERS");
             for(int layerIndex=0;layerIndex<g.scene.layers.count;layerIndex++){
                 bool visible=(e.camLayerMask&(1u<<layerIndex))!=0;
@@ -6327,6 +6586,37 @@ static void drawDetailsContent(UI& ui) {
             ui.dragFloat("Wet Level", &e.reverbWet, 0.01f, 0.0f, 1.0f);
             ui.dragFloat("Decay (seconds)", &e.reverbDecay, 0.02f, 0.1f, 12.0f);
             ui.label("A listener inside the sphere gets the tail and ambient diffusion.", { .55f, .59f, .66f });
+        }
+        ui.componentEnd();
+    }
+
+    if (detailKind == DETAIL_POSTPROCESS && e.hasPostProcess) {
+        bool collapsed = (e.detailCollapsed & (1u << DETAIL_POSTPROCESS)) != 0;
+        int card = optionalHeader(DETAIL_POSTPROCESS, "detail_postprocess", "POST PROCESS VOLUME", true, collapsed);
+        if (card & UI::COMP_REMOVE) {
+            e.hasPostProcess = false;
+            addLog(0, "Post Process Volume removed from %s.", e.name);
+        } else if (!collapsed) {
+            PostSettings& pp = e.ppSettings;
+            ui.checkbox("Infinite Extent (Unbound)", &e.ppUnbound);
+            if (!e.ppUnbound)
+                ui.label("Grades a view inside this object's box.", { .55f, .59f, .66f });
+            ui.dragFloat("Priority", &e.ppPriority, 0.1f, -100, 100);
+            ui.dragFloat("Blend Weight", &e.ppBlendWeight, 0.01f, 0, 1);
+            ui.header("COLOR GRADING");
+            ui.dragFloat("Exposure", &pp.exposure, 0.01f, 0.0f, 4.0f);
+            ui.dragFloat("Contrast", &pp.contrast, 0.01f, 0.0f, 3.0f);
+            ui.dragFloat("Saturation", &pp.saturation, 0.01f, 0.0f, 3.0f);
+            ui.colorEdit("Tint", &pp.tint);
+            ui.header("EFFECTS");
+            ui.dragFloat("Bloom Intensity", &pp.bloomIntensity, 0.01f, 0.0f, 4.0f);
+            ui.dragFloat("Bloom Threshold", &pp.bloomThreshold, 0.01f, 0.0f, 2.0f);
+            ui.dragFloat("Vignette", &pp.vignette, 0.01f, 0.0f, 1.0f);
+            ui.dragFloat("Chromatic Aberration", &pp.chromaticAberration, 0.1f, 0.0f, 40.0f);
+            ui.dragFloat("Film Grain", &pp.grain, 0.005f, 0.0f, 0.6f);
+            if (ui.button("Reset to neutral")) { pp = PostSettings(); }
+            ui.label("Grading runs on the finished image.", { .55f, .59f, .66f });
+            ui.label("A camera can opt out of it.", { .55f, .59f, .66f });
         }
         ui.componentEnd();
     }
@@ -7505,6 +7795,33 @@ static void browserCreateAsset(int kind) {
     else openBlueprintDoc(abs, rel);
 }
 
+// Unreal's "Create Material Instance": a child asset with no logic of its own
+// that just overrides the parent's exposed parameters.
+static void browserCreateMaterialInstance(const std::string& parentRel) {
+    std::string data;
+    MaterialAsset parent;
+    if (!readFile(g.projectDir + "\\" + parentRel, data) || matTextIsInstance(data) ||
+        !parent.deserialize(data)) {
+        addLog(2, "Could not read the parent Material: %s", parentRel.c_str());
+        return;
+    }
+    std::string base = fs::path(parentRel).stem().string() + "_Inst.matinst";
+    std::string name = uniqueDest(curDirAbs(), base);
+    std::string rel = relJoin(g.curRel, name);
+    MaterialInstance instance;
+    snprintf(instance.parent, sizeof(instance.parent), "%s", parentRel.c_str());
+    if (!writeFile(g.projectDir + "\\" + rel, instance.serialize())) {
+        addLog(2, "Could not create the Material Instance.");
+        return;
+    }
+    scanBrowser();
+    browserSetSingleSelectionRel(rel);
+    openMaterialDoc(g.projectDir + "\\" + rel, rel);
+    int params = (int)matCollectParameters(parent).size();
+    addLog(1, "Material Instance created: %s (parent: %s, %d parameter(s))",
+           rel.c_str(), parentRel.c_str(), params);
+}
+
 static void browserCreateChildBlueprint(const std::string& parentRel) {
     std::string data;
     BPGraph parent;
@@ -7992,6 +8309,9 @@ static void drawContenutiContent(UI& ui) {
         if (g.browserCtx == 1) {
             items.push_back({ g.ctxIcon == 2 ? "Instantiate" : "Open", 1 });
             if (g.ctxIcon == 4) items.push_back({ "Create Child Blueprint", 8 });
+            // only a real material graph can parent an instance
+            if (g.ctxIcon == 16 && !matPathIsInstance(g.ctxName))
+                items.push_back({ "Create Material Instance", 17 });
             if (g.ctxIcon == 0) items.push_back({ "Folder color...", 16 });
             items.push_back({ "Rename", 7 });   // every asset and folder can be renamed
             items.push_back({ "Copy", 2 });
@@ -8139,6 +8459,7 @@ static void drawContenutiContent(UI& ui) {
             browserStartRename(g.browserCtx == 3 ? g.ctxRelPath : relJoin(g.curRel, g.ctxName));
             break;
         case 8: browserCreateChildBlueprint(g.ctxRelPath); break;
+        case 17: browserCreateMaterialInstance(g.ctxRelPath); break;
         case 10: {
             std::error_code ec;
             std::string nm = uniqueDest(curDirAbs(), "NewFolder");
@@ -9112,6 +9433,143 @@ static void windowContent(UI& ui, const std::string& id) {
     else if (id == "navigation") drawNavigationContent(ui);
     else if (id == "animation") drawAnimationContent(ui);
     else if (id == "animator") drawAnimatorContent(ui);
+    else if (id == "help") drawHelpContent(ui);
+}
+
+static std::string currentLevelRelativeToProject() {
+    if (!g.projectPath[0] || g.projectDir.empty()) return {};
+    std::error_code ec;
+    fs::path rel = fs::relative(fs::path(g.projectPath), fs::path(g.projectDir), ec);
+    return ec ? std::string() : rel.string();
+}
+
+static std::string newLiveProjectCache(const std::string& code) {
+    std::error_code ec;
+    fs::path base = fs::temp_directory_path(ec);
+    if (ec) base = fs::path(g.baseDir);
+    fs::path root = base / "ImpulsoLive" /
+        (code + "_" + std::to_string(GetCurrentProcessId()) + "_" + std::to_string(GetTickCount64()));
+    return root.string();
+}
+
+static bool hostCurrentProjectLive() {
+    if (g.inHub || g.projectDir.empty()) return false;
+    if (!g.live.host(g.liveDisplayName)) return false;
+    if (!g.live.shareProject(g.projectDir, g.projectName, currentLevelRelativeToProject())) {
+        g.live.stop(); return false;
+    }
+    return true;
+}
+
+static void drawLiveWindow() {
+    if (!g.liveWindowOpen) return;
+    UI& ui = g.ui;
+    float w = 500.0f, h = 430.0f;
+    UIRect rc{ ((float)g.width - w) * .5f, TOP_H + 42.0f, w, h };
+    ui.panelBegin("live_session", rc.x, rc.y, rc.w, rc.h, "LIVE MULTI-USER SESSION");
+    ui.labelWrapped("Work on the level together in real time. The host owns the canonical scene and is the only developer who writes project files.", { .76f,.84f,.94f });
+    ui.spacing(6);
+    ui.header("DEVELOPER");
+    ui.label("Display name", { .58f,.64f,.72f });
+    ui.textInput("live_display_name", g.liveDisplayName, sizeof(g.liveDisplayName));
+    ui.spacing(6);
+
+    if (g.live.role() == LiveSession::Role::Offline) {
+        ui.header("START OR JOIN");
+        ui.label("Six-digit session code", { .58f,.64f,.72f });
+        ui.textInput("live_join_code", g.liveJoinCode, sizeof(g.liveJoinCode));
+        ui.row(g.inHub ? 1 : 2);
+        if (!g.inHub && ui.buttonColored("HOST SESSION", { .10f,.34f,.21f }, { .66f,1.0f,.76f })) {
+            if (hostCurrentProjectLive()) addLog(1, "Live project session started. Code: %s", g.live.code().c_str());
+            else addLog(2, "Could not host: %s", g.live.status().c_str());
+        }
+        if (ui.buttonColored("JOIN SESSION", { .12f,.26f,.45f }, { .70f,.86f,1.0f })) {
+            std::string cache = g.inHub ? newLiveProjectCache(g.liveJoinCode) : std::string();
+            if (g.live.join(g.liveJoinCode, g.liveDisplayName, cache)) {
+                g.livePendingScene.clear(); g.liveProjectProgress.clear();
+                addLog(0, "Searching for live session %s...", g.liveJoinCode);
+            }
+            else addLog(2, "Could not join: %s", g.live.status().c_str());
+        }
+        ui.spacing(8);
+        ui.labelWrapped("This build discovers sessions on the same local network. Internet codes require a relay/rendezvous service.", { .72f,.58f,.38f });
+    } else {
+        Vec3 statusColor = g.live.connected() ? Vec3{ .46f,.92f,.62f } : Vec3{ .95f,.72f,.34f };
+        ui.header(g.live.role() == LiveSession::Role::Host ? "HOSTING" : "JOINING");
+        ui.label(g.live.status(), statusColor);
+        if (g.live.role() == LiveSession::Role::Host) {
+            std::string code = "Session code:  " + g.live.code();
+            ui.label(code, { .50f,.78f,1.0f });
+            if (ui.button("Copy session code")) setClipboardText(g.live.code());
+        } else {
+            ui.labelWrapped("Guest saves are disabled. Level edits are proposed to the host and committed there.", { .62f,.78f,.92f });
+            if (!g.liveProjectProgress.empty())
+                ui.label("Project files: " + g.liveProjectProgress, { .48f,.76f,1.0f });
+        }
+        ui.spacing(6);
+        ui.header("DEVELOPERS");
+        std::string self = std::string("You: ") + g.liveDisplayName + (g.live.role() == LiveSession::Role::Host ? "  (Host)" : "  (Guest)");
+        ui.label(self, { .84f,.88f,.94f });
+        for (const LiveSession::Peer& peer : g.live.peers()) {
+            std::string row = peer.name + (peer.id == 0 ? "  (Host)" : "");
+            ui.label(row, peer.color);
+        }
+        ui.spacing(8);
+        if (ui.buttonColored("LEAVE SESSION", { .38f,.13f,.13f }, { 1.0f,.74f,.74f })) {
+            if (g.liveRemoteProject) returnToHub();
+            else g.live.stop();
+            addLog(0, "Left the live session.");
+        }
+    }
+    ui.spacing(7);
+    if (ui.button("Close window")) g.liveWindowOpen = false;
+    ui.panelEnd();
+}
+
+static void drawHelpContent(UI& ui) {
+    // Kept deliberately as a single vertical flow: the dock panel owns the
+    // viewport height and UI::panelBegin supplies scrolling when it is short.
+    ui.header("IMPULSO ENGINE");
+    ui.label(std::string("Installed version: ") + IMPULSO_ENGINE_VERSION, { .72f,.82f,.94f });
+    ui.label("Live protocol: " + std::to_string(IMPULSO_LIVE_PROTOCOL), { .58f,.68f,.80f });
+    ui.spacing(8);
+    ui.header("ENGINE UPDATES");
+    EngineUpdater::State state = g.updater.state();
+    Vec3 statusColor = state == EngineUpdater::State::Error ? Vec3{ .98f,.48f,.42f }
+                     : state == EngineUpdater::State::Available || state == EngineUpdater::State::Ready ? Vec3{ .48f,.92f,.62f }
+                     : Vec3{ .68f,.76f,.86f };
+    ui.labelWrapped(g.updater.status(), statusColor);
+    std::string available = g.updater.availableVersion();
+    if (!available.empty() && EngineUpdater::isNewerVersion(available, IMPULSO_ENGINE_VERSION))
+        ui.label("Available version: " + available, { .48f,.78f,1.0f });
+    std::string notes = g.updater.releaseNotes();
+    if (!notes.empty()) { ui.spacing(5); ui.header("RELEASE NOTES"); ui.labelWrapped(notes, { .72f,.78f,.86f }); }
+    if (state == EngineUpdater::State::Downloading) {
+        uint64_t done = g.updater.downloadedBytes(), total = g.updater.totalBytes();
+        char progress[96];
+        if (total) snprintf(progress, sizeof(progress), "Download: %.1f / %.1f MB (%.0f%%)", done/1048576.0, total/1048576.0, done*100.0/total);
+        else snprintf(progress, sizeof(progress), "Download: %.1f MB", done/1048576.0);
+        ui.label(progress, { .50f,.76f,1.0f });
+    }
+    ui.spacing(8);
+    if (state == EngineUpdater::State::Available) {
+        if (ui.buttonColored("DOWNLOAD UPDATE", { .10f,.34f,.21f }, { .66f,1.0f,.76f })) g.updater.download();
+    } else if (state == EngineUpdater::State::Ready) {
+        if (ui.buttonColored("INSTALL AND RESTART", { .12f,.30f,.48f }, { .72f,.88f,1.0f }) && g.updater.applyAndRestart())
+            g.running = false;
+    } else if (state != EngineUpdater::State::Checking && state != EngineUpdater::State::Downloading) {
+        if (ui.button("Check again")) g.updater.checkNow();
+    }
+    if (state == EngineUpdater::State::Disabled)
+        ui.labelWrapped("Configure an HTTPS manifest in update.cfg next to the editor executable.", { .76f,.62f,.38f });
+    ui.spacing(10);
+    ui.separator();
+    ui.spacing(8);
+    ui.header("LIVE COLLABORATION");
+    ui.labelWrapped("Live sessions require the same wire-protocol version. Incompatible builds are rejected before project files are transferred.", { .66f,.74f,.84f });
+    ui.spacing(8);
+    ui.header("UPDATE SAFETY");
+    ui.labelWrapped("Packages are accepted only over HTTPS and only after their SHA-256 hash matches the signed release manifest. The previous executable is retained as a rollback copy.", { .66f,.74f,.84f });
 }
 
 static UIRect buildWindowRect() {
@@ -9200,6 +9658,7 @@ static void drawMinimalPlayBar() {
 // Save just the asset shown in the active document tab (the scene on the Level
 // tab). Wired to the tab-bar Save button and Ctrl+S.
 static void saveActiveDoc() {
+    if (isLiveGuest()) { addLog(2, "Live guests cannot save project files. The host owns persistence."); return; }
     if (g.mode == Mode::Play) { addLog(2, "Stop the simulation before saving."); return; }
     if (g.prefabEditMode) { savePrefabEdit(); return; }
     if (g.activeDoc == 0) {                       // Level tab → save the scene
@@ -9222,6 +9681,7 @@ static void saveActiveDoc() {
 
 // Save the whole project: the scene plus every open asset with unsaved changes.
 static void saveAllProject() {
+    if (isLiveGuest()) { addLog(2, "Live guests cannot save project files. The host owns persistence."); return; }
     if (g.mode == Mode::Play) { addLog(2, "Stop the simulation before saving."); return; }
     if (g.prefabEditMode) { savePrefabEdit(); return; }
     int saved = 0;
@@ -9331,6 +9791,22 @@ static void drawMenuBar() {
         if (ui.menuItem("Stop and restore")) stopPlay();
         ui.menuEnd();
     }
+    if (ui.menuBegin("Session")) {
+        if (ui.menuItem("Live multi-user session...")) g.liveWindowOpen = true;
+        if (g.live.role() != LiveSession::Role::Offline) {
+            ui.menuSeparator();
+            std::string sessionStatus = g.live.role() == LiveSession::Role::Host
+                ? "Hosting code " + g.live.code()
+                : g.live.status();
+            ui.menuLabel(sessionStatus.c_str());
+            if (ui.menuItem("Leave live session")) {
+                if (g.liveRemoteProject) returnToHub();
+                else g.live.stop();
+                addLog(0, "Left the live session.");
+            }
+        }
+        ui.menuEnd();
+    }
     if (ui.menuBegin("Build")) {
         if (ui.menuItem("Build Settings...")) {
             g.buildWindowOpen = true;
@@ -9346,9 +9822,9 @@ static void drawMenuBar() {
         ui.menuEnd();
     }
     if (ui.menuBegin("Windows")) {
-        const char* ids[8] = { "viewport", "outliner", "dettagli", "log", "contenuti", "navigation", "animation", "animator" };
-        const char* titles[8] = { "Viewport", "Outliner", "Details", "Log", "Content", "Navigation", "Animation", "Animator Controller" };
-        for (int i = 0; i < 8; i++) {
+        const char* ids[9] = { "viewport", "outliner", "dettagli", "log", "contenuti", "navigation", "animation", "animator", "help" };
+        const char* titles[9] = { "Viewport", "Outliner", "Details", "Log", "Content", "Navigation", "Animation", "Animator Controller", "Help & Updates" };
+        for (int i = 0; i < 9; i++) {
             DockWindow* w = g.dock.find(ids[i]);
             char label[64];
             snprintf(label, sizeof(label), "%s %s", w && w->open ? "[x]" : "[  ]", titles[i]);
@@ -9358,6 +9834,12 @@ static void drawMenuBar() {
         if (ui.menuItem(g.editorFullscreen ? "[x] Fullscreen application   F11"
                                            : "[ ] Fullscreen application   F11"))
             toggleEditorFullscreen();
+        ui.menuEnd();
+    }
+    if (ui.menuBegin("Help")) {
+        std::string version = std::string("Impulso Engine ") + IMPULSO_ENGINE_VERSION;
+        ui.menuLabel(version.c_str());
+        if (ui.menuItem("Help & engine updates...")) { openHelpPanel(); g.updater.checkNow(); }
         ui.menuEnd();
     }
 
@@ -9699,12 +10181,13 @@ static void drawHub() {
         bool over = in.mouseX >= rc.x && in.mouseX < rc.x + rc.w && in.mouseY >= rc.y && in.mouseY < rc.y + rc.h;
         r->drawRectPx(rc.x, rc.y, rc.w, rc.h, over ? bg * 1.3f : bg, 1);
         float tw = r->textWidth(label);
-        r->drawTextLine(rc.x + (rc.w - tw) * 0.5f, rc.y + 16, label, { 0.92f, 0.95f, 1.0f }, 1);
+        r->drawTextLine(rc.x + (rc.w - tw) * 0.5f, ui.textCenterY(rc), label, { 0.92f, 0.95f, 1.0f }, 1);
         return over && in.mousePressed;
     };
-    float halfW = (cardW - 12) * 0.5f;
-    bool doCreate = actionBtn(cx, halfW, "+  Create new project...", { 0.16f, 0.34f, 0.20f });
-    bool doConnect = actionBtn(cx + halfW + 12, halfW, "Add existing project...", { 0.18f, 0.28f, 0.44f });
+    float thirdW = (cardW - 24) / 3.0f;
+    bool doCreate = actionBtn(cx, thirdW, "+  Create project...", { 0.16f, 0.34f, 0.20f });
+    bool doConnect = actionBtn(cx + thirdW + 12, thirdW, "Add existing...", { 0.18f, 0.28f, 0.44f });
+    bool doLiveJoin = actionBtn(cx + (thirdW + 12) * 2, thirdW, "Join live project...", { 0.28f, 0.20f, 0.48f });
     y += 62;
 
     r->drawTextLine(cx, y, "RECENT PROJECTS", { 0.5f, 0.55f, 0.62f }, 1);
@@ -9749,7 +10232,8 @@ static void drawHub() {
     r->setUIScissor(0, 0, 0, 0, false);
 
     // defer actions until after the layout pass (they mutate g.hubProjects)
-    if (doCreate) hubCreateProject();
+    if (doLiveJoin) g.liveWindowOpen = true;
+    else if (doCreate) hubCreateProject();
     else if (doConnect) hubConnectProject();
     else if (openReq >= 0) { std::string pth = g.hubProjects[openReq].path, ll = g.hubProjects[openReq].lastLevel; openProjectAt(pth, ll); }
     else if (removeReq >= 0) hubRemove(removeReq);
@@ -10079,6 +10563,9 @@ static void drawEditorUI() {
             curve->draw(g.ui);
             g.ui.panelEnd();
         } else if (MaterialEditor* mat = activeMaterial()) {
+            // refreshed every frame: the browser rescan rebuilds the lists
+            mat->textureAssets = &g.projectTextureAssets;
+            mat->materialAssets = &g.projectMaterialAssets;
             g.ui.panelBegin(docPanelId, 0, TOP_H, (float)g.width, contentH - TOP_H, nullptr);
             mat->draw(g.ui);
             g.ui.panelEnd();
@@ -10096,6 +10583,7 @@ static void drawEditorUI() {
     drawMenuBar();
     drawBuildWindow();
     drawSettingsWindow();
+    drawLiveWindow();
     if (g.activeDoc == 0) g.dock.drawDragOverlay(g.ui);
     g.ui.end();
     { std::string copied; if (g.ui.takeCopyText(copied)) setClipboardText(copied); }   // Ctrl+C from a field → OS clipboard
@@ -10249,7 +10737,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_CHAR:
         if ((g.ui.wantKeyboard() || (activeBP() && activeBP()->wantsTextInput()) ||
-             (activeWidget() && activeWidget()->wantsTextInput())) && g.uiIn.typedCount < 31) {
+             (activeWidget() && activeWidget()->wantsTextInput()) ||
+             (activeMaterial() && activeMaterial()->wantsTextInput())) && g.uiIn.typedCount < 31) {
             char c = (char)wp;
             if (c >= 32 && c < 127) g.uiIn.typed[g.uiIn.typedCount++] = c;
         }
@@ -10299,7 +10788,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == 'X') { if (bp) bp->redo(); else redoScene(); return 0; }
         }
         if (g.ui.wantKeyboard() || (bp && bp->wantsTextInput()) ||
-            (activeWidget() && activeWidget()->wantsTextInput())) {
+            (activeWidget() && activeWidget()->wantsTextInput()) ||
+            (activeMaterial() && activeMaterial()->wantsTextInput())) {
             bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             if (wp == VK_BACK) g.uiIn.keyBackspace = true;
             if (wp == VK_DELETE) g.uiIn.keyDelete = true;
@@ -12707,6 +13197,327 @@ static int runTests() {
     }
 
     {
+        // Post Process Volumes: bounds, priority order, blend weight, the camera
+        // opt-out and the round-trip through the scene file.
+        s.clear();
+        Entity& outer = s.spawnBox("Outer volume", { 0, 0, 0 }, { 20, 20, 20 }, { 1, 1, 1 });
+        outer.hasPostProcess = true;
+        outer.ppPriority = 0;
+        outer.ppSettings.saturation = 0.0f;
+        outer.ppSettings.vignette = 1.0f;
+        Entity& inner = s.spawnBox("Inner volume", { 0, 0, 0 }, { 4, 4, 4 }, { 1, 1, 1 });
+        inner.hasPostProcess = true;
+        inner.ppPriority = 5;                       // wins wherever both apply
+        inner.ppSettings.saturation = 2.0f;
+        inner.ppSettings.vignette = 0.0f;
+
+        PostSettings outside = resolvePostProcessAt({ 40, 0, 0 });
+        PostSettings inOuter = resolvePostProcessAt({ 8, 0, 0 });
+        PostSettings inBoth = resolvePostProcessAt({ 0, 0, 0 });
+        bool boundsOk = outside.isNeutral() &&
+                        fabsf(inOuter.saturation - 0.0f) < 1e-4f && fabsf(inOuter.vignette - 1.0f) < 1e-4f &&
+                        fabsf(inBoth.saturation - 2.0f) < 1e-4f && fabsf(inBoth.vignette - 0.0f) < 1e-4f;
+
+        // half weight lands halfway between neutral and the volume's settings
+        inner.hasPostProcess = false;
+        outer.ppBlendWeight = 0.5f;
+        PostSettings half = resolvePostProcessAt({ 0, 0, 0 });
+        bool weightOk = fabsf(half.saturation - 0.5f) < 1e-4f && fabsf(half.vignette - 0.5f) < 1e-4f;
+
+        // an unbound volume reaches anywhere
+        outer.ppUnbound = true;
+        outer.ppBlendWeight = 1.0f;
+        bool unboundOk = fabsf(resolvePostProcessAt({ 500, 500, 500 }).saturation) < 1e-4f;
+
+        // a camera that opted out is never graded, wherever it stands
+        Entity& shooter = s.spawnEmpty("Camera", { 0, 0, 0 });
+        shooter.isCamera = true;
+        shooter.camPostProcess = false;
+        g.mode = Mode::Play;
+        bool cameraOptOutOk = resolvePostProcess().isNeutral();
+        shooter.camPostProcess = true;
+        bool cameraOptInOk = !resolvePostProcess().isNeutral();
+        g.mode = Mode::Edit;
+
+        EditorScene loadedScene;
+        bool roundtripOk = loadedScene.deserialize(s.serialize()) && loadedScene.entities.size() == 3 &&
+                           loadedScene.entities[0].hasPostProcess && loadedScene.entities[0].ppUnbound &&
+                           fabsf(loadedScene.entities[0].ppSettings.saturation) < 1e-4f &&
+                           fabsf(loadedScene.entities[0].ppSettings.vignette - 1.0f) < 1e-4f &&
+                           !loadedScene.entities[1].hasPostProcess &&
+                           loadedScene.entities[2].isCamera && loadedScene.entities[2].camPostProcess &&
+                           PostSettings().isNeutral();
+        s.clear();
+
+        bool ok = boundsOk && weightOk && unboundOk && cameraOptOutOk && cameraOptInOk && roundtripOk;
+        snprintf(detail, sizeof(detail), "bounds/priority=%s, blend weight=%s, unbound=%s, camera flag=%s, roundtrip=%s",
+                 boundsOk ? "ok" : "NO", weightOk ? "ok" : "NO", unboundOk ? "ok" : "NO",
+                 cameraOptOutOk && cameraOptInOk ? "ok" : "NO", roundtripOk ? "ok" : "NO");
+        report("Post Process Volume", ok, detail);
+        if (!ok) failures++;
+    }
+
+    {
+        // Material graph v2: settings + multi-output wires round-trip, a v1 file
+        // still loads (its Result pins move to the Unreal-shaped slots) and the
+        // fold reaches the draw item.
+        MaterialAsset asset;
+        asset.blendMode = MBM_MASKED; asset.shadingModel = MSM_UNLIT;
+        asset.twoSided = true; asset.maskClip = 0.7f; asset.castShadow = false;
+        int result = asset.resultId();
+        int texture = asset.addNode(MAT_TEXTURE, 20, 20);
+        snprintf(asset.find(texture)->texturePath, sizeof(asset.find(texture)->texturePath), "Textures\\wood.png");
+        int split = asset.addNode(MAT_BREAK, 200, 20);
+        int gloss = asset.addNode(MAT_SCALAR_PARAM, 20, 300);
+        asset.find(gloss)->scalar = 0.25f;
+        snprintf(asset.find(gloss)->paramName, sizeof(asset.find(gloss)->paramName), "Gloss");
+        asset.connect(texture, 0, split, 0);          // Texture RGB -> Break In
+        asset.connect(split, 2, result, 4);           // Break B -> Emissive Color
+        asset.connect(texture, 0, result, 0);         // Texture RGB -> Base Color
+        int mask = asset.addNode(MAT_CONST_FLOAT, 200, 300);
+        asset.find(mask)->scalar = 0.1f;
+        asset.connect(mask, 0, result, 6);            // below the clip: fully masked
+
+        MaterialAsset loaded;
+        bool roundtrip = loaded.deserialize(asset.serialize()) &&
+                         loaded.blendMode == MBM_MASKED && loaded.shadingModel == MSM_UNLIT &&
+                         loaded.twoSided && !loaded.castShadow && fabsf(loaded.maskClip - 0.7f) < 1e-4f &&
+                         loaded.nodes.size() == asset.nodes.size() &&
+                         loaded.find(split) && loaded.find(split)->in[0] == texture &&
+                         loaded.find(result) && loaded.find(result)->in[4] == split &&
+                         loaded.find(result)->inPin[4] == 2 &&
+                         loaded.find(gloss) && strcmp(loaded.find(gloss)->paramName, "Gloss") == 0 &&
+                         fabsf(loaded.find(gloss)->scalar - 0.25f) < 1e-4f &&
+                         strcmp(loaded.find(texture)->texturePath, "Textures\\wood.png") == 0;
+
+        // a wire that would close a loop is refused, so the fold cannot recurse
+        MaterialAsset cyclic;
+        int mulA = cyclic.addNode(MAT_MULTIPLY, 0, 0), mulB = cyclic.addNode(MAT_MULTIPLY, 200, 0);
+        cyclic.connect(mulA, 0, mulB, 0);
+        cyclic.connect(mulB, 0, mulA, 0);
+        bool loopRefused = cyclic.find(mulA)->in[0] < 0 && cyclic.find(mulB)->in[0] == mulA;
+
+        MaterialEval maskedEval = loaded.evaluate();
+        DrawItem maskedItem;
+        applyMaterialEval(maskedEval, maskedItem);
+        bool maskedOk = maskedEval.fullyMasked() && maskedItem.unlit && maskedItem.doubleSided &&
+                        !maskedItem.castShadow && !maskedItem.additive &&
+                        maskedEval.baseColorTex == "Textures\\wood.png";
+
+        // version 1: Base Color / Metallic / Roughness / Emissive in the old order
+        MaterialAsset legacy;
+        bool legacyOk = legacy.deserialize(
+            "IMPULSOMAT 1\n"
+            "view 10 20\n"
+            "node 1 0 430 120 0.8 0.8 0.8 0.5 2 -1 3 4\n"
+            "node 2 1 120 120 0.5 0.25 0.125 0.5 -1 -1 -1 -1\n"
+            "node 3 2 120 220 0 0 0 0.35 -1 -1 -1 -1\n"
+            "node 4 2 120 320 0 0 0 0.9 -1 -1 -1 -1\n");
+        const MatNode* legacyResult = legacyOk ? legacy.find(1) : nullptr;
+        legacyOk = legacyOk && legacyResult && legacyResult->in[0] == 2 && legacyResult->in[1] == -1 &&
+                   legacyResult->in[3] == 3 && legacyResult->in[4] == 4;
+        MaterialEval legacyEval = legacy.evaluate();
+        legacyOk = legacyOk && fabsf(legacyEval.baseColor.x - 0.5f) < 1e-4f &&
+                   fabsf(legacyEval.roughness - 0.35f) < 1e-4f && fabsf(legacyEval.emissive - 0.9f) < 1e-4f &&
+                   legacyEval.blendMode == MBM_OPAQUE && !legacyEval.twoSided;
+
+        // additive translucency reaches the renderer, and Lit re-enables the PBR pins
+        MaterialAsset additive;
+        additive.blendMode = MBM_ADDITIVE;
+        int alpha = additive.addNode(MAT_CONST_FLOAT, 0, 0);
+        additive.find(alpha)->scalar = 0.4f;
+        additive.connect(alpha, 0, additive.resultId(), 5);
+        DrawItem additiveItem;
+        applyMaterialEval(additive.evaluate(), additiveItem);
+        bool additiveOk = additiveItem.additive && fabsf(additiveItem.opacity - 0.4f) < 1e-4f &&
+                          !additiveItem.castShadow &&
+                          matResultPinEnabled(1, MBM_OPAQUE, MSM_LIT) && !matResultPinEnabled(1, MBM_OPAQUE, MSM_UNLIT) &&
+                          !matResultPinEnabled(5, MBM_OPAQUE, MSM_LIT) && matResultPinEnabled(6, MBM_MASKED, MSM_LIT);
+
+        // Result pins are authorable without a graph: an unwired pin reads the
+        // value typed on the node, a wire overrides it.
+        MaterialAsset defaults;
+        defaults.resultDef[1] = { 0.8f, 0.8f, 0.8f };          // Metallic
+        defaults.resultDef[4] = { 0.25f, 0.5f, 1.0f };         // Emissive Color
+        MaterialEval beforeWire = defaults.evaluate();
+        int emissiveConst = defaults.addNode(MAT_CONST_COLOR, 0, 0);
+        defaults.find(emissiveConst)->color = { 2, 0, 0 };
+        defaults.connect(emissiveConst, 0, defaults.resultId(), 4);
+        MaterialEval afterWire = defaults.evaluate();
+        MaterialAsset defaultsLoaded;
+        bool defaultsOk = fabsf(beforeWire.metallic - 0.8f) < 1e-4f &&
+                          fabsf(beforeWire.emissive - 1.0f) < 1e-4f &&
+                          fabsf(beforeWire.emissiveColor.z - 1.0f) < 1e-4f &&
+                          fabsf(afterWire.emissiveColor.x - 2.0f) < 1e-4f &&      // the wire wins
+                          fabsf(afterWire.metallic - 0.8f) < 1e-4f &&             // this one still does not
+                          defaultsLoaded.deserialize(defaults.serialize()) &&
+                          fabsf(defaultsLoaded.resultDef[1].x - 0.8f) < 1e-4f &&
+                          fabsf(defaultsLoaded.resultDef[4].z - 1.0f) < 1e-4f;
+
+        // Texture Sample: a UVs input, and RGBA / R / G / B / A on the way out
+        const MatNode* sampler = loaded.find(texture);
+        bool samplerOk = matNodeInputCount(MAT_TEXTURE) == 1 && matNodeOutputCount(MAT_TEXTURE) == 5 &&
+                         strcmp(matOutPinName(MAT_TEXTURE, 0), "RGBA") == 0 &&
+                         strcmp(matOutPinName(MAT_TEXTURE, 4), "A") == 0 &&
+                         strcmp(matPinName(MAT_TEXTURE, 0), "UVs") == 0 &&
+                         sampler && sampler->in[0] < 0;
+        {
+            MaterialAsset alphaGraph;
+            int sample = alphaGraph.addNode(MAT_TEXTURE, 0, 0);
+            snprintf(alphaGraph.find(sample)->texturePath, 192, "Textures\\leaf.png");
+            alphaGraph.blendMode = MBM_TRANSLUCENT;
+            alphaGraph.connect(sample, 4, alphaGraph.resultId(), 5);   // Alpha -> Opacity
+            const MatNode* resultNode = alphaGraph.find(alphaGraph.resultId());
+            samplerOk = samplerOk && resultNode->in[5] == sample && resultNode->inPin[5] == 4;
+        }
+
+        // reroute knots pass their value straight through
+        MaterialAsset knots;
+        int knotValue = knots.addNode(MAT_CONST_FLOAT, 0, 0);
+        knots.find(knotValue)->scalar = 0.25f;
+        int knotA = knots.addNode(MAT_REROUTE, 100, 0), knotB = knots.addNode(MAT_REROUTE, 200, 0);
+        knots.connect(knotValue, 0, knotA, 0);
+        knots.connect(knotA, 0, knotB, 0);
+        knots.connect(knotB, 0, knots.resultId(), 3);          // Roughness
+        bool rerouteOk = fabsf(knots.evaluate().roughness - 0.25f) < 1e-4f &&
+                         matNodeIsReroute(MAT_REROUTE) && !matNodeIsReroute(MAT_MULTIPLY);
+        // a second knot feeding off the first, so the bypass has to fan out
+        int knotC = knots.addNode(MAT_REROUTE, 200, 120);
+        knots.connect(knotA, 0, knotC, 0);
+        knots.connect(knotC, 0, knots.resultId(), 1);          // Metallic
+        // removing a knot rejoins both wires it was carrying, and the fold is unchanged
+        knots.removeNode(knotA);
+        MaterialEval afterBypass = knots.evaluate();
+        rerouteOk = rerouteOk && !knots.find(knotA) &&
+                    knots.find(knotB) && knots.find(knotB)->in[0] == knotValue &&
+                    knots.find(knotC) && knots.find(knotC)->in[0] == knotValue &&
+                    fabsf(afterBypass.roughness - 0.25f) < 1e-4f &&
+                    fabsf(afterBypass.metallic - 0.25f) < 1e-4f;
+        // removing a knot with nothing upstream just leaves the inputs unconnected
+        knots.removeNode(knotB);
+        rerouteOk = rerouteOk && knots.find(knots.resultId())->in[3] == knotValue;
+
+        // If: the branch follows the comparison of A and B
+        MaterialAsset branchGraph;
+        int branch = branchGraph.addNode(MAT_IF, 0, 0);
+        int lhs = branchGraph.addNode(MAT_CONST_FLOAT, 0, 100);
+        int rhs = branchGraph.addNode(MAT_CONST_FLOAT, 0, 200);
+        int greater = branchGraph.addNode(MAT_CONST_FLOAT, 0, 300);
+        int equal = branchGraph.addNode(MAT_CONST_FLOAT, 0, 400);
+        int less = branchGraph.addNode(MAT_CONST_FLOAT, 0, 500);
+        branchGraph.find(greater)->scalar = 0.9f;
+        branchGraph.find(equal)->scalar = 0.5f;
+        branchGraph.find(less)->scalar = 0.1f;
+        branchGraph.connect(lhs, 0, branch, 0);
+        branchGraph.connect(rhs, 0, branch, 1);
+        branchGraph.connect(greater, 0, branch, 2);
+        branchGraph.connect(equal, 0, branch, 3);
+        branchGraph.connect(less, 0, branch, 4);
+        branchGraph.connect(branch, 0, branchGraph.resultId(), 3);   // Roughness
+        auto branchValue = [&](float a, float b) {
+            branchGraph.find(lhs)->scalar = a;
+            branchGraph.find(rhs)->scalar = b;
+            return branchGraph.evaluate().roughness;
+        };
+        bool ifOk = matNodeInputCount(MAT_IF) == 5 &&
+                    fabsf(branchValue(2, 1) - 0.9f) < 1e-4f &&
+                    fabsf(branchValue(1, 1) - 0.5f) < 1e-4f &&
+                    fabsf(branchValue(0, 1) - 0.1f) < 1e-4f &&
+                    // new nodes land on the grid, so a column of them lines up
+                    branchGraph.find(branchGraph.addNode(MAT_ADD, 37, 71))->x == 32 &&
+                    branchGraph.find(branchGraph.addNode(MAT_ADD, 37, 71))->y == 64;
+
+        // Convert to Parameter, and no two parameters answering to one name
+        MaterialAsset params;
+        int firstConst = params.addNode(MAT_CONST_FLOAT, 0, 0);
+        int secondConst = params.addNode(MAT_CONST_FLOAT, 0, 100);
+        int colorConst = params.addNode(MAT_CONST_COLOR, 0, 200);
+        int sampleNode = params.addNode(MAT_TEXTURE, 0, 400);
+        snprintf(params.find(sampleNode)->texturePath, 192, "Textures\\bark.png");
+        bool paramsOk = params.convertToParameter(firstConst) && params.convertToParameter(secondConst) &&
+                        params.convertToParameter(colorConst) &&
+                        params.convertToParameter(sampleNode) &&
+                        params.find(sampleNode)->type == MAT_TEXTURE_PARAM &&
+                        // promoting a sampler keeps the texture it points at
+                        strcmp(params.find(sampleNode)->texturePath, "Textures\\bark.png") == 0 &&
+                        !params.convertToParameter(params.addNode(MAT_MULTIPLY, 0, 300)) &&
+                        params.find(firstConst)->type == MAT_SCALAR_PARAM &&
+                        params.find(colorConst)->type == MAT_VECTOR_PARAM &&
+                        strcmp(params.find(firstConst)->paramName, params.find(secondConst)->paramName) != 0 &&
+                        params.uniqueParamName(params.find(firstConst)->paramName, -1) !=
+                            params.find(firstConst)->paramName &&
+                        params.uniqueParamName(params.find(firstConst)->paramName, firstConst) ==
+                            params.find(firstConst)->paramName;
+
+        // ── material instance: the parent's graph driven by overridden parameters ──
+        MaterialAsset parentMaterial;
+        int tintParam = parentMaterial.addNode(MAT_CONST_COLOR, 0, 0);
+        parentMaterial.find(tintParam)->color = { 1, 0, 0 };
+        parentMaterial.convertToParameter(tintParam);
+        snprintf(parentMaterial.find(tintParam)->paramName, 64, "BaseTint");
+        int roughParam = parentMaterial.addNode(MAT_CONST_FLOAT, 0, 200);
+        parentMaterial.find(roughParam)->scalar = 0.9f;
+        parentMaterial.convertToParameter(roughParam);
+        snprintf(parentMaterial.find(roughParam)->paramName, 64, "Rough");
+        int plainConst = parentMaterial.addNode(MAT_CONST_FLOAT, 0, 400);   // not a parameter
+        parentMaterial.find(plainConst)->scalar = 0.25f;
+        parentMaterial.connect(tintParam, 0, parentMaterial.resultId(), 0);
+        parentMaterial.connect(roughParam, 0, parentMaterial.resultId(), 3);
+        parentMaterial.connect(plainConst, 0, parentMaterial.resultId(), 1);
+
+        std::vector<MatParamInfo> exposed = matCollectParameters(parentMaterial);
+        bool instanceOk = exposed.size() == 2 && exposed[0].name == "BaseTint" &&
+                          exposed[0].kind == MPK_VECTOR && exposed[1].kind == MPK_SCALAR;
+
+        MaterialInstance childInstance;
+        snprintf(childInstance.parent, sizeof(childInstance.parent), "Materials\\Parent.mat");
+        MatParamOverride& tintOverride = childInstance.ensure(exposed[0]);
+        tintOverride.enabled = true;
+        tintOverride.color = { 0, 0, 1 };
+        childInstance.ensure(exposed[1]);           // present but NOT overridden
+
+        MaterialAsset resolved = parentMaterial;
+        matApplyInstance(resolved, childInstance);
+        MaterialEval resolvedEval = resolved.evaluate();
+        instanceOk = instanceOk &&
+                     fabsf(resolvedEval.baseColor.z - 1.0f) < 1e-4f &&      // the override won
+                     fabsf(resolvedEval.baseColor.x) < 1e-4f &&
+                     fabsf(resolvedEval.roughness - 0.9f) < 1e-4f &&        // inherited
+                     fabsf(resolvedEval.metallic - 0.25f) < 1e-4f;          // plain constant untouched
+
+        // only enabled overrides are written, and they survive the round-trip
+        MaterialInstance reloadedInstance;
+        std::string instanceText = childInstance.serialize();
+        instanceOk = instanceOk && matTextIsInstance(instanceText) &&
+                     matPathIsInstance("Materials\\Rock_Inst.matinst") &&
+                     !matPathIsInstance("Materials\\Rock.mat") &&
+                     reloadedInstance.deserialize(instanceText) &&
+                     strcmp(reloadedInstance.parent, "Materials\\Parent.mat") == 0 &&
+                     reloadedInstance.overrides.size() == 1 &&
+                     reloadedInstance.find("BaseTint") && reloadedInstance.find("BaseTint")->enabled &&
+                     fabsf(reloadedInstance.find("BaseTint")->color.z - 1.0f) < 1e-4f &&
+                     !reloadedInstance.find("Rough");
+
+        // a parameter the parent no longer exposes is dropped
+        reloadedInstance.ensure(exposed[1]);
+        std::vector<MatParamInfo> shrunk = { exposed[1] };
+        reloadedInstance.pruneAgainst(shrunk);
+        instanceOk = instanceOk && reloadedInstance.overrides.size() == 1 &&
+                     reloadedInstance.find("Rough") && !reloadedInstance.find("BaseTint");
+
+        bool ok = roundtrip && loopRefused && maskedOk && legacyOk && additiveOk &&
+                  defaultsOk && rerouteOk && paramsOk && samplerOk && ifOk && instanceOk;
+        snprintf(detail, sizeof(detail),
+                 "roundtrip=%s, loop refused=%s, masked/unlit=%s, v1 pins=%s, additive=%s, defaults=%s, reroute=%s, parameters=%s, sampler=%s, if=%s, instance=%s",
+                 roundtrip ? "ok" : "NO", loopRefused ? "ok" : "NO", maskedOk ? "ok" : "NO",
+                 legacyOk ? "ok" : "NO", additiveOk ? "ok" : "NO", defaultsOk ? "ok" : "NO",
+                 rerouteOk ? "ok" : "NO", paramsOk ? "ok" : "NO", samplerOk ? "ok" : "NO",
+                 ifOk ? "ok" : "NO", instanceOk ? "ok" : "NO");
+        report("Material graph (settings / v1 compat / fold)", ok, detail);
+        if (!ok) failures++;
+    }
+
+    {
         // Audio settings assets: all three formats round-trip, scene references
         // survive serialization and class + attenuation affect the final gain.
         s.clear();
@@ -13589,6 +14400,66 @@ static int runTests() {
         report("Riordino componenti Blueprint", ok, detail);
         if (!ok) failures++;
     }
+    {
+        // Real loopback smoke test for LAN discovery, authenticated join, framed
+        // TCP scene/project transfer, and bidirectional editor-camera presence.
+        LiveSession hostSession, guestSession;
+        fs::path transferRoot = fs::temp_directory_path() / ("impulso_live_transfer_" + std::to_string(GetTickCount64()));
+        fs::path hostRoot = transferRoot / "host", guestRoot = transferRoot / "guest";
+        std::error_code transferEc; fs::create_directories(hostRoot / "Meshes", transferEc);
+        writeFile((hostRoot / "impulso.project").string(), "Impulso project\n");
+        writeFile((hostRoot / "Meshes" / "asset.bin").string(), std::string(180000, 'P'));
+        bool started = hostSession.host("Host Test") &&
+                       hostSession.shareProject(hostRoot.string(), "Remote Test", "Levels\\Main.imp") &&
+                       guestSession.join(hostSession.code(), "Guest Test", guestRoot.string());
+        bool joined = false, sceneReceived = false, projectReady = false;
+        for (int tick = 0; started && tick < 1000 && (!sceneReceived || !projectReady); tick++) {
+            hostSession.update(); guestSession.update();
+            LiveSession::Event e;
+            while (hostSession.pollEvent(e)) if (e.type == LiveSession::EventType::Joined) {
+                joined = true; hostSession.sendSceneTo(e.peerId, "live-scene-payload");
+            }
+            while (guestSession.pollEvent(e)) {
+                if (e.type == LiveSession::EventType::SceneSnapshot && e.text == "live-scene-payload") sceneReceived = true;
+                if (e.type == LiveSession::EventType::ProjectReady) projectReady = true;
+            }
+            Sleep(4);
+        }
+        hostSession.sendPresence({ 1,2,3 }, { 1,2,2 });
+        guestSession.sendPresence({ 4,5,6 }, { 4,5,5 });
+        for (int tick = 0; started && tick < 80; tick++) { hostSession.update(); guestSession.update(); Sleep(2); }
+        bool hostSawGuest = false, guestSawHost = false;
+        for (const auto& p : hostSession.peers()) if (p.name == "Guest Test" && p.cameraValid) hostSawGuest = true;
+        for (const auto& p : guestSession.peers()) if (p.name == "Host Test" && p.cameraValid) guestSawHost = true;
+        std::string transferredAsset;
+        bool assetOk = readFile((guestRoot / "Meshes" / "asset.bin").string(), transferredAsset) &&
+                       transferredAsset.size() == 180000 && transferredAsset.front() == 'P';
+        bool ok = started && joined && sceneReceived && projectReady && assetOk && hostSawGuest && guestSawHost;
+        snprintf(detail, sizeof(detail), "start=%s join=%s scene=%s project=%s asset=%s presence=%s/%s",
+                 started?"ok":"no", joined?"ok":"no", sceneReceived?"ok":"no", projectReady?"ok":"no", assetOk?"ok":"no",
+                 hostSawGuest?"ok":"no", guestSawHost?"ok":"no");
+        report("Live session host/join/project/presence", ok, detail);
+        if (!ok) failures++;
+        hostSession.stop(); guestSession.stop(); fs::remove_all(transferRoot, transferEc);
+    }
+    {
+        bool newer = EngineUpdater::isNewerVersion("0.2.1", "0.2.0") &&
+                     EngineUpdater::isNewerVersion("1.0.0", "0.99.9") &&
+                    !EngineUpdater::isNewerVersion("0.2.0", "0.2.0") &&
+                    !EngineUpdater::isNewerVersion("0.1.9", "0.2.0");
+        report("Engine updater semantic version ordering", newer, newer ? "upgrade/downgrade ordering ok" : "version ordering failed");
+        if (!newer) failures++;
+    }
+    {
+        const std::string hash(64, 'a'); std::string parsedVersion;
+        std::string json = "\xEF\xBB\xBF{\"version\":\"0.2.1\",\"url\":\"https://updates.example/impulso.exe\",\"sha256\":\"" + hash + "\",\"notes\":\"Test\"}";
+        std::string textManifest = "IMPULSO_UPDATE 1\nversion 0.2.1\nurl https://updates.example/impulso.exe\nsha256 " + hash + "\nnotes Test\n";
+        bool ok = EngineUpdater::validateManifestText(json, &parsedVersion) && parsedVersion == "0.2.1" &&
+                  EngineUpdater::validateManifestText(textManifest, nullptr) &&
+                 !EngineUpdater::validateManifestText("{\"version\":\"9.0\",\"url\":\"http://unsafe\"}", nullptr);
+        report("Engine updater manifest validation", ok, ok ? "JSON/BOM/text/HTTPS validation ok" : "manifest validation failed");
+        if (!ok) failures++;
+    }
 
     char summary[128];
     snprintf(summary, sizeof(summary), "\n%s - %d tests failed\n", failures ? "SOME TESTS FAILED" : "ALL TESTS PASSED", failures);
@@ -13616,6 +14487,10 @@ static void enableDpiAwareness() {
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     enableDpiAwareness();
+    for (int i = 1; i + 2 < __argc; i++) {
+        if (strcmp(__argv[i], "--apply-update") == 0)
+            return EngineUpdater::runApplyMode(__argv[i + 1], strtoul(__argv[i + 2], nullptr, 10));
+    }
     bool testMode = false, shotMode = false;
     int shotDemo = 1;
     for (int i = 1; i < __argc; i++) {
@@ -13639,6 +14514,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     }
 
     loadEditorPreferences();
+    g.updater.initialize(g.baseDir);
+    g.nextAutomaticUpdateCheck = GetTickCount64() + 6ull * 60ull * 60ull * 1000ull;
 
     // dock layout
     // level-editor panels: they live only around the viewport (the Level tab)
@@ -13650,11 +14527,14 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     g.dock.addWindow("navigation", "Navigation", DOCK_BOTTOM, 3);
     g.dock.addWindow("animation", "Animation", DOCK_BOTTOM, 4);
     g.dock.addWindow("animator", "Animator Controller", DOCK_BOTTOM, 5);
+    g.dock.addWindow("help", "Help & Updates", DOCK_BOTTOM, 6);
+    if (DockWindow* help = g.dock.find("help")) help->open = false;
     // when the viewport floats over other panels, the dock asks us to repaint the 3D
     // on top of them (clearAll=false, so it overlays instead of wiping the UI)
     g.dock.renderViewportOverlay = [](const UIRect& cr) {
         if (!g.frameForRender || cr.w < 4 || cr.h < 4) return;
         g.renderer.render(*g.frameForRender, g.camera, (int)cr.x, (int)cr.y, (int)cr.w, (int)cr.h, false);
+        renderCameraPreview(*g.frameForRender, cr);
     };
     {
         std::string layout;
@@ -13744,12 +14624,14 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         buildFrame(frame);
         g.frameForRender = &frame;
         g.renderer.render(frame, g.camera, (int)vp.x, (int)vp.y, (int)vp.w, (int)vp.h);
+        renderCameraPreview(frame, vp);
         drawEditorUI();
         // second pass so panels settle (scroll extents computed on first frame)
         vp = viewportRect();
         buildFrame(frame);
         g.frameForRender = &frame;
         g.renderer.render(frame, g.camera, (int)vp.x, (int)vp.y, (int)vp.w, (int)vp.h);
+        renderCameraPreview(frame, vp);
         drawEditorUI();
         glFinish();
         saveBMP("screenshot.bmp", g.width, g.height);
@@ -13785,6 +14667,19 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     Frame frame;
     MSG msg;
     while (g.running) {
+        // Pump collaboration before taking the per-frame undo/change snapshot,
+        // so remote state is never echoed back as a new local edit.
+        updateLiveSession();
+        EngineUpdater::State updateState = g.updater.state();
+        if (g.updater.configured() && GetTickCount64() >= g.nextAutomaticUpdateCheck) {
+            g.updater.checkNow();
+            g.nextAutomaticUpdateCheck = GetTickCount64() + 6ull * 60ull * 60ull * 1000ull;
+        }
+        if (!g.inHub && !g.updateNotificationShown &&
+            (updateState == EngineUpdater::State::Available || updateState == EngineUpdater::State::Ready)) {
+            g.updateNotificationShown = true;
+            openHelpPanel();
+        }
         std::string sceneHistoryBefore;
         if (!g.inHub && g.mode == Mode::Edit) sceneHistoryBefore = g.scene.serialize();
         g.uiIn.mousePressed = false;
@@ -13830,6 +14725,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             g.ui.begin(&g.renderer, g.uiIn);
             drawHub();
+            drawLiveWindow();
             g.ui.end();
             SwapBuffers(g.hdc);
             continue;
@@ -13853,6 +14749,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         UIRect vp = viewportRect();
         bool haveVp = vp.w > 4 && vp.h > 4;
         g.camera.update(haveVp ? vp.w / vp.h : (float)g.width / (float)g.height);
+        g.live.sendPresence(g.camera.fpActive ? g.camera.fpEye : g.camera.eye,
+                            g.camera.fpActive ? g.camera.fpEye + g.camera.fpRot.rotate({ 0,0,-1 }) : g.camera.target);
         buildFrame(frame);
         g.frameForRender = &frame;
         // A floating/native viewport is drawn later at its own z-order (dock overlay
@@ -13861,7 +14759,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         DockWindow* vpw = g.dock.find("viewport");
         bool vpElsewhere = vpw && vpw->open && (vpw->area == DOCK_FLOAT || vpw->area == DOCK_NATIVE);
         if (vpElsewhere) g.renderer.render(frame, g.camera, 0, 0, 0, 0);
-        else g.renderer.render(frame, g.camera, (int)vp.x, (int)vp.y, (int)vp.w, (int)vp.h);
+        else {
+            g.renderer.render(frame, g.camera, (int)vp.x, (int)vp.y, (int)vp.w, (int)vp.h);
+            renderCameraPreview(frame, vp);
+        }
         g.animationPanelDrawnThisFrame = false;
         drawEditorUI();
         SwapBuffers(g.hdc);
@@ -13890,6 +14791,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
             }
         }
         finishSceneHistoryFrame(sceneHistoryBefore);
+        syncLiveSceneChange(sceneHistoryBefore);
     }
 
     if (!g.standaloneMode) {
@@ -13897,7 +14799,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         saveEditorPreferences();
     }
     // remember the open project's current level for next launch
-    if (!g.standaloneMode && !g.inHub && !g.projectDir.empty()) {
+    if (!g.standaloneMode && !g.inHub && !g.projectDir.empty() && !g.liveRemoteProject) {
         std::string rel;
         if (g.projectPath[0]) {
             std::string abs = g.projectPath;

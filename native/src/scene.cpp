@@ -344,7 +344,8 @@ std::string EditorScene::serialize() const {
           << e.lightColor.z << " " << e.lightIntensity << " " << e.lightRange << "\n";
         if (e.isCamera) o << "camera 1 " << e.camFov << " " << e.camOffsetY << " "
                           << e.camNearClip << " " << e.camClipDistance << " "
-                          << (e.camLinearClipping ? 1 : 0) << " " << e.camLayerMask << "\n";
+                          << (e.camLinearClipping ? 1 : 0) << " " << e.camLayerMask << " "
+                          << (e.camPostProcess ? 1 : 0) << "\n";
         o << "audio " << (e.hasAudio ? 1 : 0) << " " << e.audioVolume << " "
           << (e.audioLoop ? 1 : 0) << " " << (e.audioPlayOnAwake ? 1 : 0) << " "
           << (e.audioSpatial ? 1 : 0) << " " << e.audioMinDistance << " " << e.audioMaxDistance
@@ -353,6 +354,14 @@ std::string EditorScene::serialize() const {
         o << "audio_atten " << (e.audioAttenuation[0] ? e.audioAttenuation : "-") << "\n";
         o << "audio_concurrency " << (e.audioConcurrency[0] ? e.audioConcurrency : "-") << "\n";
         o << "reverb " << (e.hasReverb ? 1 : 0) << " " << e.reverbRadius << " " << e.reverbWet << " " << e.reverbDecay << "\n";
+        if (e.hasPostProcess) {
+            const PostSettings& pp = e.ppSettings;
+            o << "postprocess 1 " << (e.ppUnbound ? 1 : 0) << " " << e.ppPriority << " " << e.ppBlendWeight << "\n";
+            o << "pp_grade " << pp.exposure << " " << pp.contrast << " " << pp.saturation << " "
+              << pp.tint.x << " " << pp.tint.y << " " << pp.tint.z << " " << pp.vignette << "\n";
+            o << "pp_fx " << pp.bloomThreshold << " " << pp.bloomIntensity << " "
+              << pp.chromaticAberration << " " << pp.grain << "\n";
+        }
         o << "aiagent " << (e.hasAIAgent ? 1 : 0) << " " << e.aiSpeed << " " << e.aiAcceleration << " "
           << e.aiAngularSpeed << " " << e.aiStoppingDistance << " " << e.aiBaseOffset << " "
           << (e.aiDebugDraw ? 1 : 0) << "\n";
@@ -508,11 +517,13 @@ bool EditorScene::deserialize(const std::string& text) {
         } else if (line.rfind("camera ", 0) == 0) {
             int isCam = 0;
             unsigned mask = cur.camLayerMask; int linear = cur.camLinearClipping ? 1 : 0;
-            sscanf(line.c_str(), "camera %d %f %f %f %f %d %u", &isCam, &cur.camFov, &cur.camOffsetY,
-                   &cur.camNearClip, &cur.camClipDistance, &linear, &mask);
+            int post = cur.camPostProcess ? 1 : 0;   // absent in older scenes: stays on
+            sscanf(line.c_str(), "camera %d %f %f %f %f %d %u %d", &isCam, &cur.camFov, &cur.camOffsetY,
+                   &cur.camNearClip, &cur.camClipDistance, &linear, &mask, &post);
             cur.isCamera = isCam != 0;
             cur.camLinearClipping = linear != 0;
             cur.camLayerMask = mask;
+            cur.camPostProcess = post != 0;
             cur.camNearClip = clampf(cur.camNearClip, .001f, 1000.0f);
             cur.camClipDistance = (std::max)(cur.camNearClip + .01f, cur.camClipDistance);
         } else if (line.rfind("audio ", 0) == 0) {
@@ -541,6 +552,21 @@ bool EditorScene::deserialize(const std::string& text) {
             int enabled = 0;
             if (sscanf(line.c_str(), "reverb %d %f %f %f", &enabled, &cur.reverbRadius, &cur.reverbWet, &cur.reverbDecay) >= 1)
                 cur.hasReverb = enabled != 0;
+        } else if (line.rfind("postprocess ", 0) == 0) {
+            int enabled = 0, unbound = 0;
+            if (sscanf(line.c_str(), "postprocess %d %d %f %f", &enabled, &unbound,
+                       &cur.ppPriority, &cur.ppBlendWeight) >= 1) {
+                cur.hasPostProcess = enabled != 0;
+                cur.ppUnbound = unbound != 0;
+            }
+        } else if (line.rfind("pp_grade ", 0) == 0) {
+            PostSettings& pp = cur.ppSettings;
+            sscanf(line.c_str(), "pp_grade %f %f %f %f %f %f %f", &pp.exposure, &pp.contrast, &pp.saturation,
+                   &pp.tint.x, &pp.tint.y, &pp.tint.z, &pp.vignette);
+        } else if (line.rfind("pp_fx ", 0) == 0) {
+            PostSettings& pp = cur.ppSettings;
+            sscanf(line.c_str(), "pp_fx %f %f %f %f", &pp.bloomThreshold, &pp.bloomIntensity,
+                   &pp.chromaticAberration, &pp.grain);
         } else if (line.rfind("aiagent ", 0) == 0) {
             int enabled = 0, debugDraw = 1;
             int fields = sscanf(line.c_str(), "aiagent %d %f %f %f %f %f %d", &enabled, &cur.aiSpeed, &cur.aiAcceleration,
@@ -737,7 +763,8 @@ std::string EditorScene::serializeSubset(const std::vector<int>& ids) const {
           << e.lightColor.z << " " << e.lightIntensity << " " << e.lightRange << "\n";
         if (e.isCamera) o << "camera 1 " << e.camFov << " " << e.camOffsetY << " "
                           << e.camNearClip << " " << e.camClipDistance << " "
-                          << (e.camLinearClipping ? 1 : 0) << " " << e.camLayerMask << "\n";
+                          << (e.camLinearClipping ? 1 : 0) << " " << e.camLayerMask << " "
+                          << (e.camPostProcess ? 1 : 0) << "\n";
         o << "audio " << (e.hasAudio ? 1 : 0) << " " << e.audioVolume << " "
           << (e.audioLoop ? 1 : 0) << " " << (e.audioPlayOnAwake ? 1 : 0) << " "
           << (e.audioSpatial ? 1 : 0) << " " << e.audioMinDistance << " " << e.audioMaxDistance
@@ -746,6 +773,14 @@ std::string EditorScene::serializeSubset(const std::vector<int>& ids) const {
         o << "audio_atten " << (e.audioAttenuation[0] ? e.audioAttenuation : "-") << "\n";
         o << "audio_concurrency " << (e.audioConcurrency[0] ? e.audioConcurrency : "-") << "\n";
         o << "reverb " << (e.hasReverb ? 1 : 0) << " " << e.reverbRadius << " " << e.reverbWet << " " << e.reverbDecay << "\n";
+        if (e.hasPostProcess) {
+            const PostSettings& pp = e.ppSettings;
+            o << "postprocess 1 " << (e.ppUnbound ? 1 : 0) << " " << e.ppPriority << " " << e.ppBlendWeight << "\n";
+            o << "pp_grade " << pp.exposure << " " << pp.contrast << " " << pp.saturation << " "
+              << pp.tint.x << " " << pp.tint.y << " " << pp.tint.z << " " << pp.vignette << "\n";
+            o << "pp_fx " << pp.bloomThreshold << " " << pp.bloomIntensity << " "
+              << pp.chromaticAberration << " " << pp.grain << "\n";
+        }
         o << "aiagent " << (e.hasAIAgent ? 1 : 0) << " " << e.aiSpeed << " " << e.aiAcceleration << " "
           << e.aiAngularSpeed << " " << e.aiStoppingDistance << " " << e.aiBaseOffset << " "
           << (e.aiDebugDraw ? 1 : 0) << "\n";

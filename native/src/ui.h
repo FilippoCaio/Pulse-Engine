@@ -27,6 +27,17 @@ struct UIInput {
 
 struct UIRect { float x = 0, y = 0, w = 0, h = 0; };
 
+// One entry of the big Unreal-style asset picker: a thumbnail plus a name. The
+// thumbnail is an explicit texture, a solid colour, or an icon registered with
+// UI::setAssetIcon — whichever the caller can supply for that asset type.
+struct UIAssetOption {
+    std::string label;
+    std::string iconImage;      // key passed to setAssetIcon (empty = none)
+    unsigned tex = 0;           // GLuint: explicit texture, wins over iconImage
+    Vec3 swatch{ 0, 0, 0 };     // solid-colour thumbnail
+    bool useSwatch = false;
+};
+
 class UI {
 public:
     void begin(Renderer* renderer, const UIInput& input);
@@ -70,6 +81,17 @@ public:
     // puts its graph toggles next to the Save button rather than on a row of its own)
     bool toolIconButtonRect(const char* id, const UIRect& rc, int icon, bool active = false,
                             const char* tooltip = nullptr, bool dirty = false);
+    // ── big asset picker ──
+    // Draws the field (thumbnail + name + arrow) at `rc` and, while it is open,
+    // the option list right under it. Returns the index newly picked this frame,
+    // or -1. `outHeight` receives field + open list, so a caller laying itself
+    // out by hand knows how far to advance. Only one field is open at a time.
+    int assetFieldRect(const char* fieldId, const UIRect& rc, int current,
+                       const std::vector<UIAssetOption>& options, float* outHeight = nullptr);
+    // total height the field will take this frame (for reserving layout space)
+    float assetFieldHeight(const char* fieldId, float fieldH, int optionCount) const;
+    void drawAssetThumb(const UIAssetOption& opt, float x, float y, float size);
+
     bool selectable(const char* id, const std::string& text, bool selected);
     bool checkbox(const char* label, bool* v);
     void disabledField(const char* label, const std::string& value = "Collegato");
@@ -80,12 +102,17 @@ public:
     // Numeric field at an explicit rect (for bespoke panels such as the widget
     // designer). Wheel nudges by `wheelStep`; clicking switches to full keyboard
     // editing with selection, Ctrl+A/C/V — the same behaviour as blueprint values.
+    // `textScale` scales the text (and its padding) with the box, for a field
+    // drawn on a zoomable canvas such as a material node.
     bool numberFieldRect(const char* id, const UIRect& rc, float* v, float wheelStep,
                          const char* label = nullptr, bool isInt = false,
-                         float mn = -1e9f, float mx = 1e9f);
+                         float mn = -1e9f, float mx = 1e9f, float textScale = 1.0f);
     bool colorEdit(const char* label, Vec3* c);
     bool colorEditRGBA(const char* label, Vec3* rgb, float* alpha);
     void openColorPicker(const char* id, Vec3* rgb, float* alpha = nullptr, float x = -1, float y = -1);
+    // the picker opened with `id` moved its colour this frame (it writes straight
+    // through the pointer, so a panel that tracks unsaved changes needs to ask)
+    bool takeColorPick(const char* id);
     // Drop-down list anchored at (x, y), for panels that lay themselves out at
     // explicit rects (the widget designer). Same deferred pattern as the colour
     // picker: it stays open across frames and is drawn on top in end(). The
@@ -99,10 +126,19 @@ public:
     // the panel beneath it has already hit-tested by then — it must consult this
     // and block itself, or the click that picks an item also hits the row below.
     bool popupCoversPointer() const;
+    // Any deferred popup (colour picker or drop-down) is open. A panel that wants
+    // to behave modally blocks itself on this instead: while the popup is up
+    // nothing underneath reacts, so the click that dismisses it is not also a
+    // click on the canvas below.
+    bool popupOpen() const { return enumPickerId_ != 0 || colorPickerId_ != 0; }
     void separator();
     void spacing(float h = 5);
     // truncate `s` to fit `maxW` px, appending "..."; empty maxW returns s
     std::string ellipsize(const std::string& s, float maxW) const;
+    // Baseline that centres one line of text in `rc`. Every control that draws a
+    // label inside a box uses it, so the gap above a caption always equals the
+    // gap below it — panels laying themselves out should use it too.
+    float textCenterY(const UIRect& rc, float scale = 1.0f) const;
     // if the mouse is over `rc` and `full` doesn't fit in `rc.w`, queue a tooltip
     void hoverTip(const std::string& full, const UIRect& rc, float shownW);
     // queue a tooltip at the cursor unconditionally (widget Tool Tip Text)
@@ -273,11 +309,13 @@ private:
     int enumPickerOpenFrame_ = -1;
     UIRect enumPickerRect_{};      // resolved (clamped) rect of the open list
     std::unordered_map<std::string, GLuint> assetIcons_;
+    std::string assetFieldOpen_;   // id of the open big asset-picker drop-down
 
     uint32_t hash(const char* s, uint32_t seed) const;
     bool mouseIn(float x, float y, float w, float h) const;
-    bool numericEdit(uint32_t id, const UIRect& rc, bool isInt, double* out);
-    int textIndexAt(const char* text, float localX) const;
+    bool numericEdit(uint32_t id, const UIRect& rc, bool isInt, double* out, float scale = 1.0f);
+    int textIndexAt(const char* text, float localX, float scale = 1.0f) const;
+    float fieldTextY(const UIRect& rc, float scale) const;
     void beginTextSelection(uint32_t id, const char* text, int cursor);
     bool eraseTextSelection(char* text, int& len);
     bool mouseOk() const { return menuScope_ || openMenuId_ == 0; }

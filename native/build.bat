@@ -27,16 +27,17 @@ if errorlevel 1 (
 
 cd /d "%~dp0"
 if not exist build mkdir build
-set OUT_EXE=impulso.exe
+set OUT_EXE=impulso_live.exe
 if not "%~1"=="" set OUT_EXE=%~1
 
 cl /nologo /O2 /EHsc /std:c++17 /W3 /D_CRT_SECURE_NO_WARNINGS ^
-   src\app.cpp src\physics.cpp src\render.cpp src\glext.cpp src\ui.cpp src\scene.cpp src\dock.cpp src\blueprint.cpp src\curve.cpp src\animation.cpp src\audio.cpp src\material.cpp src\widget.cpp ^
+   src\app.cpp src\physics.cpp src\render.cpp src\glext.cpp src\ui.cpp src\scene.cpp src\dock.cpp src\blueprint.cpp src\curve.cpp src\animation.cpp src\audio.cpp src\material.cpp src\widget.cpp src\live_session.cpp src\engine_update.cpp ^
    /Fo:build\ /Fe:build\%OUT_EXE% ^
-   /link opengl32.lib gdi32.lib user32.lib comdlg32.lib shell32.lib ole32.lib windowscodecs.lib winmm.lib /SUBSYSTEM:WINDOWS
+   /link opengl32.lib gdi32.lib user32.lib comdlg32.lib shell32.lib ole32.lib windowscodecs.lib winmm.lib ws2_32.lib winhttp.lib bcrypt.lib /SUBSYSTEM:WINDOWS
 
 if %errorlevel% neq 0 (
     echo BUILD FALLITA
     exit /b 1
 )
+copy /Y update.cfg build\update.cfg >nul
 echo BUILD OK: build\%OUT_EXE%

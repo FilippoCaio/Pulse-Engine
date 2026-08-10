@@ -312,12 +312,12 @@ bool UI::dragInt(const char* label, int* v, float speed, int mn, int mx) {
     Vec3 c = activeId_ == id ? C_WIDGET_ACT : (hovered ? C_WIDGET_HOT : C_WIDGET);
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, c, 1);
     if (label[0] && label[0] != '#') {
-        r->drawTextLine(rc.x + 6, rc.y + 4, stripId(label), C_TEXT_DIM, 1);
+        r->drawTextLine(rc.x + 6, textCenterY(rc), stripId(label), C_TEXT_DIM, 1);
     }
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", *v);
     float tw = r->textWidth(buf);
-    r->drawTextLine(rc.x + rc.w - tw - 8, rc.y + 4, buf, C_TEXT, 1);
+    r->drawTextLine(rc.x + rc.w - tw - 8, textCenterY(rc), buf, C_TEXT, 1);
     return changed;
 }
 
@@ -445,7 +445,7 @@ bool UI::buttonColored(const char* label, Vec3 bg, Vec3 fg) {
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, c, 1);
     std::string vis = stripId(label);
     float tw = r->textWidth(vis);
-    r->drawTextLine(rc.x + (rc.w - tw) / 2, rc.y + 4, vis, fg, 1);
+    r->drawTextLine(rc.x + (rc.w - tw) / 2, textCenterY(rc), vis, fg, 1);
     return clicked;
 }
 
@@ -561,6 +561,68 @@ bool UI::toolIconButtonRect(const char* idText, const UIRect& rc, int icon, bool
     return clicked;
 }
 
+// ── big asset picker ──
+void UI::drawAssetThumb(const UIAssetOption& opt, float x, float y, float s) {
+    r->drawRectPx(x, y, s, s, { 0.06f, 0.07f, 0.09f }, 1);
+    if (opt.tex) r->drawImagePx((GLuint)opt.tex, x + 2, y + 2, s - 4, s - 4, { 1, 1, 1 }, 1);
+    else if (opt.useSwatch) r->drawRectPx(x + 3, y + 3, s - 6, s - 6, opt.swatch, 1);
+    else if (!opt.iconImage.empty()) {
+        auto it = assetIcons_.find(opt.iconImage);
+        if (it != assetIcons_.end()) r->drawImagePx(it->second, x + 3, y + 3, s - 6, s - 6, { 1, 1, 1 }, 1);
+    }
+    Vec3 bd{ .30f, .34f, .40f };
+    r->drawRectPx(x, y, s, 1, bd, 1); r->drawRectPx(x, y + s - 1, s, 1, bd, 1);
+    r->drawRectPx(x, y, 1, s, bd, 1); r->drawRectPx(x + s - 1, y, 1, s, bd, 1);
+}
+
+static const float ASSET_ROW_H = 24;
+
+float UI::assetFieldHeight(const char* fieldId, float fieldH, int optionCount) const {
+    return assetFieldOpen_ == fieldId ? fieldH + optionCount * ASSET_ROW_H : fieldH;
+}
+
+int UI::assetFieldRect(const char* fieldId, const UIRect& rc, int current,
+                       const std::vector<UIAssetOption>& options, float* outHeight) {
+    auto inRect = [&](const UIRect& q) {
+        return !blocked_ && in_.mouseX >= q.x && in_.mouseX < q.x + q.w &&
+               in_.mouseY >= q.y && in_.mouseY < q.y + q.h;
+    };
+    const float TH = rc.h - 10;
+    bool overField = inRect(rc);
+    r->drawRectPx(rc.x, rc.y, rc.w, rc.h, overField ? Vec3{ .17f, .19f, .23f } : Vec3{ .13f, .145f, .175f }, 1);
+    r->drawRectPx(rc.x, rc.y, rc.w, 1, { .28f, .32f, .40f }, .8f);
+    const UIAssetOption* cur = (current >= 0 && current < (int)options.size()) ? &options[current] : nullptr;
+    if (cur) drawAssetThumb(*cur, rc.x + 5, rc.y + 5, TH);
+    else r->drawRectPx(rc.x + 5, rc.y + 5, TH, TH, { .06f, .07f, .09f }, 1);
+    std::string name = cur ? cur->label : "None";
+    r->drawTextLine(rc.x + TH + 16, textCenterY(rc), ellipsize(name, rc.w - TH - 46), { .88f, .92f, .98f }, 1);
+
+    bool open = assetFieldOpen_ == fieldId;
+    r->drawTextLine(rc.x + rc.w - 18, textCenterY(rc), open ? "^" : "v", C_ACCENT, 1);
+    if (overField && in_.mousePressed) { assetFieldOpen_ = open ? std::string() : fieldId; open = !open; }
+
+    int picked = -1;
+    float bottom = rc.y + rc.h;
+    if (open) {
+        for (int i = 0; i < (int)options.size(); i++) {
+            UIRect irc = { rc.x, bottom, rc.w, ASSET_ROW_H };
+            bottom += ASSET_ROW_H;
+            bool ihov = inRect(irc);
+            r->drawRectPx(irc.x, irc.y, irc.w, irc.h,
+                          i == current ? Vec3{ .12f, .24f, .40f } : (ihov ? Vec3{ .20f, .28f, .40f } : Vec3{ .10f, .11f, .135f }), 1);
+            drawAssetThumb(options[i], irc.x + 3, irc.y + 3, 18);
+            r->drawTextLine(irc.x + 28, textCenterY(irc), ellipsize(options[i].label, irc.w - 40), { .85f, .9f, .97f }, 1);
+            if (ihov && in_.mousePressed) { picked = i; assetFieldOpen_.clear(); }
+        }
+        // a click anywhere outside the field and its list closes it
+        bool insideBlock = in_.mouseX >= rc.x && in_.mouseX < rc.x + rc.w &&
+                           in_.mouseY >= rc.y && in_.mouseY < bottom;
+        if (in_.mousePressed && picked < 0 && !insideBlock) assetFieldOpen_.clear();
+    }
+    if (outHeight) *outHeight = bottom - rc.y;
+    return picked;
+}
+
 bool UI::selectable(const char* id, const std::string& text, bool selected) {
     uint32_t wid = hash(id, p_.id);
     UIRect rc = alloc(WH * 0.92f);
@@ -569,7 +631,7 @@ bool UI::selectable(const char* id, const std::string& text, bool selected) {
     if (selected) r->drawRectPx(rc.x - 4, rc.y, rc.w + 8, rc.h, C_SELECTED, 1);
     else if (hovered) r->drawRectPx(rc.x - 4, rc.y, rc.w + 8, rc.h, C_WIDGET, 0.7f);
     std::string shown = ellipsize(text, rc.w - 6.0f);
-    r->drawTextLine(rc.x + 2, rc.y + 3, shown, selected ? Vec3{ 0.75f, 0.87f, 1.0f } : C_TEXT, 1);
+    r->drawTextLine(rc.x + 2, textCenterY(rc), shown, selected ? Vec3{ 0.75f, 0.87f, 1.0f } : C_TEXT, 1);
     hoverTip(text, rc, rc.w - 6.0f);
     return clicked;
 }
@@ -582,7 +644,7 @@ bool UI::checkbox(const char* label, bool* v) {
     float box = 15;
     r->drawRectPx(rc.x, rc.y + 3, box, box, hovered ? C_WIDGET_HOT : C_WIDGET, 1);
     if (*v) r->drawRectPx(rc.x + 3, rc.y + 6, box - 6, box - 6, C_ACCENT, 1);
-    r->drawTextLine(rc.x + box + 8, rc.y + 3, stripId(label), C_TEXT, 1);
+    r->drawTextLine(rc.x + box + 8, textCenterY(rc), stripId(label), C_TEXT, 1);
     if (clicked) { *v = !*v; return true; }
     return false;
 }
@@ -593,23 +655,28 @@ void UI::disabledField(const char* label, const std::string& value) {
     Vec3 fg = { 0.38f, 0.41f, 0.46f };
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, bg, 1);
     if (label && label[0] && label[0] != '#')
-        r->drawTextLine(rc.x + 6, rc.y + 4, stripId(label), fg, 1);
+        r->drawTextLine(rc.x + 6, textCenterY(rc), stripId(label), fg, 1);
     float tw = r->textWidth(value);
-    r->drawTextLine(rc.x + rc.w - tw - 8, rc.y + 4, value, fg, 1);
+    r->drawTextLine(rc.x + rc.w - tw - 8, textCenterY(rc), value, fg, 1);
 }
 
 // shared editing state for numeric fields: click (without dragging) to type a value
-int UI::textIndexAt(const char* text, float localX) const {
+int UI::textIndexAt(const char* text, float localX, float scale) const {
     if (localX <= 0) return 0;
     int len=(int)strlen(text);
     float x=0;
     for(int i=0;i<len;i++){
-        char one[2]={text[i],0};float w=r->textWidth(one);
+        char one[2]={text[i],0};float w=r->textWidth(one,scale);
         if(localX<x+w*.5f)return i;
         x+=w;
     }
     return len;
 }
+
+float UI::textCenterY(const UIRect& rc, float scale) const {
+    return rc.y + (rc.h - r->fontHeight() * scale) * 0.5f;
+}
+float UI::fieldTextY(const UIRect& rc, float scale) const { return textCenterY(rc, scale); }
 
 void UI::beginTextSelection(uint32_t id,const char* text,int cursor){
     textEditId_=id;textCursor_=textAnchor_=std::max(0,std::min((int)strlen(text),cursor));textSelecting_=false;
@@ -621,22 +688,22 @@ bool UI::eraseTextSelection(char* text,int& len){
     memmove(text+a,text+b,(size_t)(len-b+1));len-=b-a;textCursor_=textAnchor_=a;return true;
 }
 
-bool UI::numericEdit(uint32_t id, const UIRect& rc, bool isInt, double* out) {
+bool UI::numericEdit(uint32_t id, const UIRect& rc, bool isInt, double* out, float scale) {
     // returns true when a value was committed into *out
     focusId_ = id;
     int len = (int)strlen(numEditBuf_);
     if(textEditId_!=id)beginTextSelection(id,numEditBuf_,len);
-    float editX=std::max(rc.x+6,rc.x+rc.w-r->textWidth(numEditBuf_)-8);
+    float editX=std::max(rc.x+6*scale,rc.x+rc.w-r->textWidth(numEditBuf_,scale)-8*scale);
     bool over=mouseIn(rc.x,rc.y,rc.w,rc.h);
     if(over&&in_.mousePressed){
-        activeId_=id;int cursor=textIndexAt(numEditBuf_,in_.mouseX-editX);
+        activeId_=id;int cursor=textIndexAt(numEditBuf_,in_.mouseX-editX,scale);
         bool dbl=lastTextClickId_==id&&frame_-lastTextClickFrame_<=18;
         lastTextClickId_=id;lastTextClickFrame_=frame_;
         if(dbl){textAnchor_=0;textCursor_=len;textSelecting_=false;}
         else{textCursor_=textAnchor_=cursor;textSelecting_=true;}
     }
     if(textSelecting_&&activeId_==id&&(in_.mouseDown||in_.mouseReleased))
-        textCursor_=textIndexAt(numEditBuf_,in_.mouseX-editX);
+        textCursor_=textIndexAt(numEditBuf_,in_.mouseX-editX,scale);
     if(in_.mouseReleased)textSelecting_=false;
     if(in_.keySelectAll){textAnchor_=0;textCursor_=len;}
     if(in_.keyLeft){if(!in_.keyShift&&textCursor_!=textAnchor_)textCursor_=std::min(textCursor_,textAnchor_);else textCursor_=std::max(0,textCursor_-1);if(!in_.keyShift)textAnchor_=textCursor_;}
@@ -669,12 +736,12 @@ bool UI::numericEdit(uint32_t id, const UIRect& rc, bool isInt, double* out) {
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, { 0.08f, 0.09f, 0.11f }, 1);
     r->drawRectPx(rc.x, rc.y, rc.w, 1, C_ACCENT, 1);
     r->drawRectPx(rc.x, rc.y + rc.h - 1, rc.w, 1, C_ACCENT, 1);
-    editX=std::max(rc.x+6,rc.x+rc.w-r->textWidth(numEditBuf_)-8);
-    if(textCursor_!=textAnchor_){int a=std::min(textCursor_,textAnchor_),b=std::max(textCursor_,textAnchor_);float x0=r->textWidth(std::string(numEditBuf_,numEditBuf_+a)),x1=r->textWidth(std::string(numEditBuf_,numEditBuf_+b));r->drawRectPx(editX+x0,rc.y+3,x1-x0,rc.h-6,C_SELECTED,1);}
-    r->drawTextLine(editX, rc.y + 4, numEditBuf_, C_TEXT, 1);
+    editX=std::max(rc.x+6*scale,rc.x+rc.w-r->textWidth(numEditBuf_,scale)-8*scale);
+    if(textCursor_!=textAnchor_){int a=std::min(textCursor_,textAnchor_),b=std::max(textCursor_,textAnchor_);float x0=r->textWidth(std::string(numEditBuf_,numEditBuf_+a),scale),x1=r->textWidth(std::string(numEditBuf_,numEditBuf_+b),scale);r->drawRectPx(editX+x0,rc.y+3,x1-x0,rc.h-6,C_SELECTED,1);}
+    r->drawTextLine(editX, fieldTextY(rc, scale), numEditBuf_, C_TEXT, 1, scale);
     if ((frame_ / 30) % 2 == 0) {
-        float tw = r->textWidth(std::string(numEditBuf_,numEditBuf_+textCursor_));
-        r->drawRectPx(editX + tw, rc.y + 4, 2, rc.h - 8, C_ACCENT, 1);
+        float tw = r->textWidth(std::string(numEditBuf_,numEditBuf_+textCursor_),scale);
+        r->drawRectPx(editX + tw, rc.y + 4, 2 * scale, rc.h - 8, C_ACCENT, 1);
     }
     if (commit || cancel) {
         if (commit) *out = atof(numEditBuf_);
@@ -723,22 +790,23 @@ bool UI::dragFloat(const char* label, float* v, float speed, float mn, float mx)
     Vec3 c = activeId_ == id ? C_WIDGET_ACT : (hovered ? C_WIDGET_HOT : C_WIDGET);
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, c, 1);
     if (label[0] && label[0] != '#') {
-        r->drawTextLine(rc.x + 6, rc.y + 4, stripId(label), C_TEXT_DIM, 1);
+        r->drawTextLine(rc.x + 6, textCenterY(rc), stripId(label), C_TEXT_DIM, 1);
     }
     char buf[32];
     snprintf(buf, sizeof(buf), "%.2f", *v);
     float tw = r->textWidth(buf);
-    r->drawTextLine(rc.x + rc.w - tw - 8, rc.y + 4, buf, C_TEXT, 1);
+    r->drawTextLine(rc.x + rc.w - tw - 8, textCenterY(rc), buf, C_TEXT, 1);
     return changed;
 }
 
 bool UI::numberFieldRect(const char* id, const UIRect& rc, float* v, float wheelStep,
-                         const char* label, bool isInt, float mn, float mx) {
+                         const char* label, bool isInt, float mn, float mx, float textScale) {
     uint32_t wid = hash(id, p_.id);
     lastItemRect_ = rc;
+    if (textScale <= 0) textScale = 1;
     if (numEditId_ == wid) {                 // keyboard editing in progress
         double nv;
-        if (numericEdit(wid, rc, isInt, &nv)) { *v = clampf((float)nv, mn, mx); return true; }
+        if (numericEdit(wid, rc, isInt, &nv, textScale)) { *v = clampf((float)nv, mn, mx); return true; }
         return false;
     }
     bool over = mouseIn(rc.x, rc.y, rc.w, rc.h) && !blocked_;
@@ -752,16 +820,17 @@ bool UI::numberFieldRect(const char* id, const UIRect& rc, float* v, float wheel
         focusId_ = wid;
         activeId_ = wid;
         snprintf(numEditBuf_, sizeof(numEditBuf_), isInt ? "%.0f" : "%g", *v);
-        float editX = std::max(rc.x + 6, rc.x + rc.w - r->textWidth(numEditBuf_) - 8);
-        beginTextSelection(wid, numEditBuf_, textIndexAt(numEditBuf_, in_.mouseX - editX));
+        float editX = std::max(rc.x + 6 * textScale, rc.x + rc.w - r->textWidth(numEditBuf_, textScale) - 8 * textScale);
+        beginTextSelection(wid, numEditBuf_, textIndexAt(numEditBuf_, in_.mouseX - editX, textScale));
         lastTextClickId_ = wid;
         lastTextClickFrame_ = frame_;
     }
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, over ? C_WIDGET_HOT : C_WIDGET, 1);
-    if (label && label[0]) r->drawTextLine(rc.x + 6, rc.y + 4, label, C_TEXT_DIM, 1);
+    float ty = fieldTextY(rc, textScale);
+    if (label && label[0]) r->drawTextLine(rc.x + 6 * textScale, ty, label, C_TEXT_DIM, 1, textScale);
     char buf[32];
     snprintf(buf, sizeof(buf), isInt ? "%.0f" : "%g", *v);
-    r->drawTextLine(rc.x + rc.w - r->textWidth(buf) - 8, rc.y + 4, buf, C_TEXT, 1);
+    r->drawTextLine(rc.x + rc.w - r->textWidth(buf, textScale) - 8 * textScale, ty, buf, C_TEXT, 1, textScale);
     return changed;
 }
 
@@ -777,19 +846,19 @@ bool UI::combo(const char* label, int* idx, const char* const* items, int count)
         std::string cleanLabel = stripId(label);
         float labelMax = (std::max)(32.0f, rc.w * 0.42f);
         std::string shownLabel = ellipsize(cleanLabel, labelMax);
-        r->drawTextLine(rc.x + 6, rc.y + 4, shownLabel, C_TEXT_DIM, 1);
+        r->drawTextLine(rc.x + 6, textCenterY(rc), shownLabel, C_TEXT_DIM, 1);
         float valueLeft = rc.x + 12 + (std::min)(r->textWidth(shownLabel), labelMax);
         float valueAvail = (std::max)(8.0f, rc.x + rc.w - 22 - valueLeft);
         std::string shown = ellipsize(cur, valueAvail);
         float tw = r->textWidth(shown);
-        r->drawTextLine(rc.x + rc.w - tw - 22, rc.y + 4, shown, C_TEXT, 1);
+        r->drawTextLine(rc.x + rc.w - tw - 22, textCenterY(rc), shown, C_TEXT, 1);
         hoverTip(cur, rc, valueAvail);
     } else {
         std::string shown = ellipsize(cur, rc.w - 28.0f);
-        r->drawTextLine(rc.x + 6, rc.y + 4, shown, C_TEXT, 1);
+        r->drawTextLine(rc.x + 6, textCenterY(rc), shown, C_TEXT, 1);
         hoverTip(cur, rc, rc.w - 28.0f);
     }
-    r->drawTextLine(rc.x + rc.w - 14, rc.y + 4, open > 0 ? "^" : "v", C_ACCENT, 1);
+    r->drawTextLine(rc.x + rc.w - 14, textCenterY(rc), open > 0 ? "^" : "v", C_ACCENT, 1);
     if (clicked) open = open > 0 ? 0.0f : 1.0f;
     bool changed = false;
     if (open > 0) {
@@ -808,7 +877,7 @@ bool UI::combo(const char* label, int* idx, const char* const* items, int count)
             Vec3 bg = i == *idx ? C_SELECTED : (ihov ? C_WIDGET_HOT : C_PANEL_HEAD);
             r->drawRectPx(irc.x + 8, irc.y, irc.w - 8, irc.h, bg, 1);
             std::string shownItem = ellipsize(items[i], irc.w - 30.0f);
-            r->drawTextLine(irc.x + 16, irc.y + 3, shownItem, C_TEXT, 1);
+            r->drawTextLine(irc.x + 16, textCenterY(irc), shownItem, C_TEXT, 1);
             hoverTip(items[i], irc, irc.w - 30.0f);
             if (iclick) {
                 *idx = i;
@@ -881,7 +950,7 @@ bool UI::textInputRect(const char* id, char* buf, int cap, const UIRect& rc, boo
         r->drawRectPx(rc.x, rc.y + rc.h - 1, rc.w, 1, C_ACCENT, 1);
     }
     if(focused&&textCursor_!=textAnchor_){int a=std::min(textCursor_,textAnchor_),b=std::max(textCursor_,textAnchor_);float x0=r->textWidth(std::string(buf,buf+a)),x1=r->textWidth(std::string(buf,buf+b));r->drawRectPx(rc.x+6+x0,rc.y+3,x1-x0,rc.h-6,C_SELECTED,1);}
-    r->drawTextLine(rc.x + 6, rc.y + 4, buf, C_TEXT, 1);
+    r->drawTextLine(rc.x + 6, textCenterY(rc), buf, C_TEXT, 1);
     if (focused && (frame_ / 30) % 2 == 0) {
         float tw = r->textWidth(std::string(buf,buf+textCursor_));
         r->drawRectPx(rc.x + 7 + tw, rc.y + 4, 2, rc.h - 8, C_ACCENT, 1);
@@ -944,6 +1013,12 @@ void UI::openColorPicker(const char* id,Vec3* rgb,float* alpha,float x,float y){
     // Callers open the picker from the very click that is still "pressed" this
     // frame; without this the click-outside test below would shut it instantly.
     colorPickerOpenFrame_=frame_;
+}
+
+bool UI::takeColorPick(const char* id) {
+    uint32_t pickerId = hash(id, p_.id ^ 0xC010A11u);
+    if (colorPickerId_ == pickerId && colorPickerChanged_) { colorPickerChanged_ = false; return true; }
+    return false;
 }
 
 void UI::drawColorPicker(){
@@ -1084,7 +1159,7 @@ int UI::componentBegin(const char* idText, const char* title, bool collapsed, bo
         if (hover && in_.mousePressed) result |= COMP_PRESSED;
         if (activeId_ == componentCardId_ && in_.mouseDown) result |= COMP_HELD;
     }
-    r->drawTextLine(dragRect.x + 1, rc.y + 4, title, hover ? Vec3{ .93f,.95f,1 } : C_TEXT, 1);
+    r->drawTextLine(dragRect.x + 1, textCenterY(rc), title, hover ? Vec3{ .93f,.95f,1 } : C_TEXT, 1);
     if (draggable) r->drawTextLine(rc.x + rc.w - right - 13, rc.y + 3, "=", hover ? C_ACCENT : C_TEXT_DIM, 1);
 
     if (removable) {
@@ -1299,7 +1374,7 @@ int UI::treeItem(const char* id, const std::string& text, int depth, bool hasChi
         tx += 21.0f;
     }
     float avail = rc.x + rc.w - tx - 2;
-    r->drawTextLine(tx, rc.y + 3, ellipsize(text, avail), rowText, 1);
+    r->drawTextLine(tx, textCenterY(rc), ellipsize(text, avail), rowText, 1);
     hoverTip(text, rc, avail);
 
     if (clicked) {
@@ -1347,7 +1422,7 @@ bool UI::tabBar(const char* const* tabs, int count, int* active) {
         r->drawRectPx(rc.x, rc.y, rc.w, rc.h, act ? C_SELECTED : (hovered ? C_WIDGET_HOT : C_PANEL_HEAD), 1);
         if (act) r->drawRectPx(rc.x, rc.y, rc.w, 2, C_ACCENT, 1);
         float tw = r->textWidth(tabs[i]);
-        r->drawTextLine(rc.x + (rc.w - tw) / 2, rc.y + 4, tabs[i], act ? C_TEXT : C_TEXT_DIM, 1);
+        r->drawTextLine(rc.x + (rc.w - tw) / 2, textCenterY(rc), tabs[i], act ? C_TEXT : C_TEXT_DIM, 1);
         if (clicked) { *active = i; changed = true; }
     }
     return changed;
@@ -1377,7 +1452,7 @@ bool UI::menuBegin(const char* label) {
     if (over && openMenuId_ && openMenuId_ != id) openMenuId_ = id; // slide between menus
     bool open = openMenuId_ == id;
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, open ? C_SELECTED : (over ? C_WIDGET_HOT : C_PANEL_HEAD), 1);
-    r->drawTextLine(rc.x + 11, rc.y + 5, label, open ? Vec3{ 0.8f, 0.9f, 1.0f } : C_TEXT, 1);
+    r->drawTextLine(rc.x + 11, textCenterY(rc), label, open ? Vec3{ 0.8f, 0.9f, 1.0f } : C_TEXT, 1);
     if (open) {
         menuScope_ = true;
         popX_ = rc.x;
@@ -1409,7 +1484,7 @@ bool UI::menuItem(const char* label) {
     bool over = mouseIn(rc.x, rc.y, rc.w, rc.h);
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, over ? C_SELECTED : C_PANEL_HEAD, 0.98f);
     std::string shown = ellipsize(label, rc.w - 28.0f);
-    r->drawTextLine(rc.x + 14, rc.y + 4, shown, over ? Vec3{ 0.85f, 0.93f, 1.0f } : C_TEXT, 1);
+    r->drawTextLine(rc.x + 14, textCenterY(rc), shown, over ? Vec3{ 0.85f, 0.93f, 1.0f } : C_TEXT, 1);
     if (over && in_.mousePressed) {
         openMenuId_ = 0;
         menuClickedThisFrame_ = true;
@@ -1431,7 +1506,7 @@ void UI::menuLabel(const char* label) {
     itemY_ += rc.h;
     popupRect_.h = itemY_ - popY_ + 3;
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, { .105f, .115f, .135f }, .99f);
-    r->drawTextLine(rc.x + 10, rc.y + 3, ellipsize(label, rc.w - 20.0f), { .38f, .68f, 1.0f }, 1);
+    r->drawTextLine(rc.x + 10, textCenterY(rc), ellipsize(label, rc.w - 20.0f), { .38f, .68f, 1.0f }, 1);
 }
 
 void UI::menuSeparator() {
@@ -1462,7 +1537,7 @@ bool UI::barButton(const char* label, Vec3 bg, Vec3 fg) {
     if (over && in_.mousePressed) activeId_ = id;
     bool clicked = over && in_.mouseReleased && activeId_ == id;
     r->drawRectPx(rc.x, rc.y, rc.w, rc.h, over ? bg * 1.3f : bg, 1);
-    r->drawTextLine(rc.x + 10, rc.y + 4, label, fg, 1);
+    r->drawTextLine(rc.x + 10, textCenterY(rc), label, fg, 1);
     return clicked;
 }
 
@@ -1480,7 +1555,7 @@ bool UI::barCheckbox(const char* label, bool* value) {
     float box = 14, by = rc.y + (rc.h - box) * 0.5f;
     r->drawRectPx(rc.x + 7, by, box, box, over ? C_WIDGET_HOT : C_WIDGET, 1);
     if (*value) r->drawRectPx(rc.x + 10, by + 3, box - 6, box - 6, C_ACCENT, 1);
-    r->drawTextLine(rc.x + 27, rc.y + 4, label,
+    r->drawTextLine(rc.x + 27, textCenterY(rc), label,
                     *value ? Vec3{ 0.82f, 0.92f, 1.0f } : C_TEXT, 1);
     if (clicked) { *value = !*value; return true; }
     return false;

@@ -19,6 +19,7 @@ enum DetailComponentKind {
     DETAIL_TRIGGER, DETAIL_ANIMATOR, DETAIL_NAV_OCCLUDER,
     DETAIL_INSPECTOR_EVENTS,
     DETAIL_CONSTRAINT,          // Physics Constraint (append at end: serialized indices stay stable)
+    DETAIL_POSTPROCESS,         // Post Process Volume
     DETAIL_COMPONENT_COUNT
 };
 
@@ -94,6 +95,17 @@ struct Entity {
     float camNearClip = 0.1f;
     float camClipDistance = 500.0f;
     uint32_t camLayerMask = 0xFFFFu;
+    bool camPostProcess = true;  // this view is graded by Post Process Volumes
+
+    // ── Post Process Volume ──
+    // Unbound volumes grade everything; a bound one only grades a view inside
+    // its box (the entity's own scaled cube). Priority breaks ties between
+    // overlapping volumes and Blend Weight fades the settings in.
+    bool hasPostProcess = false;
+    bool ppUnbound = false;
+    float ppPriority = 0.0f;
+    float ppBlendWeight = 1.0f;
+    PostSettings ppSettings;
 
     bool hasAudio = false;       // Audio Source runtime component
     char audioClip[192] = "";    // asset path relative to the project
@@ -185,7 +197,8 @@ struct Entity {
     std::vector<int> detailOrder = { DETAIL_MESH, DETAIL_PHYSICS, DETAIL_LIGHT, DETAIL_CAMERA,
                                      DETAIL_AUDIO, DETAIL_REVERB, DETAIL_AI_AGENT, DETAIL_SIMPLE_SCRIPT,
                                      DETAIL_BLUEPRINT, DETAIL_JOINTS, DETAIL_TRIGGER, DETAIL_ANIMATOR,
-                                     DETAIL_NAV_OCCLUDER, DETAIL_INSPECTOR_EVENTS, DETAIL_CONSTRAINT };
+                                     DETAIL_NAV_OCCLUDER, DETAIL_INSPECTOR_EVENTS, DETAIL_CONSTRAINT,
+                                     DETAIL_POSTPROCESS };
     uint32_t detailCollapsed = 0; // bit per DetailComponentKind
 };
 

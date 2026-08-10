@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Impulso — Physics Game Engine</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚛️</text></svg>">
+</head>
+<body>
+<div id="app">
+  <header id="toolbar">
+    <div class="tb-group">
+      <span id="logo">⚛ <b>IMPULSO</b><small>physics engine</small></span>
+    </div>
+    <div class="tb-group" id="play-controls">
+      <button id="btn-play" title="Avvia simulazione (Spazio)">▶ Gioca</button>
+      <button id="btn-pause" title="Pausa" disabled>⏸</button>
+      <button id="btn-step" title="Un passo di fisica" disabled>⏭</button>
+      <button id="btn-stop" title="Ferma e ripristina" disabled>■</button>
+    </div>
+    <div class="tb-group">
+      <div class="dropdown">
+        <button>＋ Aggiungi ▾</button>
+        <div class="dropdown-menu" id="menu-add"></div>
+      </div>
+      <div class="dropdown">
+        <button>📦 Demo ▾</button>
+        <div class="dropdown-menu" id="menu-demo"></div>
+      </div>
+    </div>
+    <div class="tb-group tb-right">
+      <button id="btn-save" title="Salva nel browser">💾 Salva</button>
+      <button id="btn-export" title="Esporta progetto .json">⬇</button>
+      <button id="btn-import" title="Importa progetto .json">⬆</button>
+      <input type="file" id="file-import" accept=".json" hidden>
+      <div class="tab-switch">
+        <button id="tab-scene" class="active">🧊 Scena 3D</button>
+        <button id="tab-blueprint">🧩 Blueprint</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="main">
+    <aside id="left-panel">
+      <div class="panel-title">GERARCHIA</div>
+      <div id="hierarchy"></div>
+      <div class="panel-title">MONDO</div>
+      <div id="world-settings" class="props"></div>
+    </aside>
+
+    <div id="center">
+      <div id="viewport-wrap">
+        <canvas id="viewport"></canvas>
+        <div id="stats"></div>
+        <div id="viewport-hint">🖱 Sx: seleziona/trascina gizmo · Dx: orbita · Rotella: zoom · Centrale/Shift+Dx: pan · F: inquadra · Canc: elimina · Ctrl+D: duplica</div>
+        <div id="play-banner" class="hidden">● SIMULAZIONE ATTIVA</div>
+      </div>
+      <div id="blueprint-panel" class="hidden">
+        <div id="bp-toolbar">
+          <select id="bp-graph-select"></select>
+          <button id="bp-new">＋ Nuovo grafo</button>
+          <button id="bp-rename">✏ Rinomina</button>
+          <button id="bp-delete">🗑</button>
+          <span class="bp-sep"></span>
+          <button id="bp-assign">📌 Assegna all'oggetto selezionato</button>
+          <span id="bp-hint">Tasto destro: aggiungi nodo · Trascina i pin per collegare · Canc: elimina selezione</span>
+        </div>
+        <div id="bp-canvas">
+          <div id="bp-world">
+            <svg id="bp-wires"></svg>
+            <div id="bp-nodes"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside id="right-panel">
+      <div class="panel-title">INSPECTOR</div>
+      <div id="inspector"></div>
+    </aside>
+  </div>
+
+  <div id="console-panel">
+    <div id="console-header">CONSOLE <span id="console-toggle">▾</span></div>
+    <div id="console-log"></div>
+  </div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
