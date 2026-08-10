@@ -1,0 +1,96 @@
+name: Release
+
+# Pubblica l'editor compilato come release, nel formato che l'hub sa installare:
+# un unico zip con una sola cartella radice, accompagnato dal suo SHA256.
+#
+# Non usa nessuna action di terze parti oltre al checkout: la compilazione la fa
+# lo stesso build.bat che si usa in locale (trova Visual Studio da solo tramite
+# vswhere, presente sui runner Windows) e la pubblicazione la fa gh, gia'
+# installato sul runner. Meno pezzi di cui fidarsi, meno cose che si rompono.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determina la versione
+        id: ver
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "VERSION contiene '$version', che non e' una versione valida (atteso X.Y.Z)"
+          }
+          # Se si sta pubblicando da un tag, tag e VERSION devono coincidere.
+          # E' il controllo che intercetta il tag messo senza aver aggiornato il
+          # file: senza, si pubblicherebbe una v0.2.0 che dentro dice 0.1.0 e
+          # l'hub proporrebbe l'aggiornamento all'infinito.
+          if ($env:GITHUB_REF -like 'refs/tags/*') {
+            $tag = $env:GITHUB_REF -replace '^refs/tags/v?', ''
+            if ($tag -ne $version) {
+              throw "Il tag e' $tag ma VERSION dice $version: allinea i due prima di pubblicare."
+            }
+          }
+          "version=$version"                      | Out-File $env:GITHUB_OUTPUT -Append
+          "name=pulse-engine-$version-win64"      | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: Compila l'editor
+        shell: cmd
+        run: native\build.bat PulseEngine.exe
+
+      - name: Impacchetta
+        id: pack
+        shell: pwsh
+        run: |
+          $name  = '${{ steps.ver.outputs.name }}'
+          $stage = "dist/$name"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          # Quello che serve all'editor per funzionare, e nient'altro:
+          # assets/icons e' letto a runtime dalla cartella dell'eseguibile.
+          Copy-Item native/build/PulseEngine.exe $stage
+          Copy-Item native/assets   "$stage/assets"   -Recurse
+          Copy-Item native/progetto "$stage/progetto" -Recurse
+          Copy-Item VERSION, README.md, LICENSE $stage
+
+          # Nessun impulso_build.cfg nel pacchetto: la sua presenza farebbe
+          # partire l'eseguibile come gioco impacchettato invece che come editor.
+          Compress-Archive -Path $stage -DestinationPath "dist/$name.zip" -Force
+
+          # Formato "<hash>  <nomefile>", quello che l'hub sa gia' leggere.
+          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
+          Set-Content "dist/$name.zip.sha256" -Value "$hash  $name.zip" -Encoding ascii
+
+          $size = [math]::Round((Get-Item "dist/$name.zip").Length / 1MB, 1)
+          Write-Host "Pacchetto: $name.zip ($size MB)"
+          Write-Host "SHA256:    $hash"
+
+      - name: Pubblica la release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.ver.outputs.version }}'
+          $name    = '${{ steps.ver.outputs.name }}'
+          $tag     = "v$version"
+
+          # gh esce con codice diverso da zero se la release non esiste: e' il
+          # modo di chiedere "c'e' gia'?", non un errore da propagare.
+          gh release view $tag *> $null
+          $exists = ($LASTEXITCODE -eq 0)
+          $global:LASTEXITCODE = 0
+
+          if (-not $exists) {
+            gh release create $tag --title "Pulse Engine $version" --generate-notes
+          }
+          gh release upload $tag "dist/$name.zip" "dist/$name.zip.sha256" --clobber

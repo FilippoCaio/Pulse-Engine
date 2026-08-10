@@ -1,0 +1,26 @@
+# Artefatti di compilazione: rigenerabili con native\build.bat.
+# Erano finiti in git e pesavano da soli piu' di tutto il resto del repo
+# (app.obj da 10,5 MB, impulso.exe da 2,5 MB).
+native/build/
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# Stato dell'editor, non sorgente: sono file che il programma riscrive da solo
+# a ogni sessione e che contengono percorsi di questo computer. Tenerli in git
+# significa che ogni clone si porta dietro il layout delle finestre e i progetti
+# recenti di chi ha fatto l'ultimo commit, e che ogni avvio sporca il diff.
+native/editor.cfg
+native/hub.cfg
+native/layout.cfg
+native/session.cfg
+
+# Esiti dei test, prodotti da un'esecuzione
+native/test_results.txt
+
+# Build impacchettate: quello che si distribuisce sta nelle release, non nel repo
+NewBuilds/
+dist/
