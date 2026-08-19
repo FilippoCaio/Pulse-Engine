@@ -133,15 +133,6 @@ evpin CurrentHealth 1
 event OnDamage_Event
 eventmeta 0
 evpin CurrentHealth 1
-event HealthBarUpdate2
-eventmeta 0
-evpin CurrentHealth 1
-event HealthBarUpdate3
-eventmeta 0
-evpin CurrentHealth 1
-event HealthBarUpdate1
-eventmeta 0
-evpin CurrentHealth 1
 event HealthBarUpdate4
 eventmeta 0
 evpin CurrentHealth 1
@@ -174,7 +165,6 @@ node 152 flow_seq 1120 98 0 2 -
 node 153 reroute 1092 210 0 0 -
 node 154 reroute 1484 210 0 0 -
 node 155 reroute_ex 1400 308 0 0 -
-node 157 reroute 1092 406 0 0 -
 node 158 reroute 1596 406 0 0 -
 node 161 m_sub 1568 154 0 0 -
 node 162 m_add 1680 336 0 0 -
@@ -334,19 +324,13 @@ node 436 bind_ev 532 -994 0 0 OnDamage
 nstr 436 OnDamage
 node 438 ev_custom 518 -826 0 0 OnDamage_Event
 nstr 438 OnDamage_Event
-node 439 ev_custom 1056.58 -921.879 0 0 HealthBarUpdate2
-nstr 439 HealthBarUpdate2
-node 440 ev_custom 1047.38 -944.679 0 0 HealthBarUpdate3
-nstr 440 HealthBarUpdate3
-node 441 ev_custom 1233.8 -946.245 0 0 HealthBarUpdate1
-nstr 441 HealthBarUpdate1
+node 442 reroute 1092 406 0 0 -
 link 63 1 64 1
 link 103 0 102 1
 link 102 0 101 0
 link 100 0 152 0
 link 101 0 153 0
 link 152 1 155 0
-link 101 1 157 0
 link 149 0 161 0
 link 154 0 161 1
 link 150 0 162 0
@@ -412,7 +396,6 @@ link 363 0 362 1
 link 360 0 362 0
 link 310 0 330 0
 link 395 0 396 1
-link 157 0 158 0
 link 153 0 154 0
 link 209 0 398 0
 link 398 0 75 1
@@ -460,6 +443,8 @@ link 330 4 436 0
 link 438 2 436 1
 link 438 1 435 2
 link 438 0 435 0
+link 101 1 442 0
+link 442 0 158 0
 comment -42 -1484 2675.43 991.135 1 0 0.304 2.66 BEGIN PLAY
 canvas *ConstructionScript
 node 1 ev_construct 40 80 0 0 -

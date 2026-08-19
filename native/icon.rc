@@ -1,0 +1,8 @@
+// Risorse dell'eseguibile.
+//
+// Windows sceglie come icona del file quella con l'identificatore ICON piu'
+// basso, quindi l'1 e' quella che si vede in Esplora risorse, nei collegamenti
+// e nella finestra delle proprieta'. Lo stesso numero viene ricaricato a
+// runtime in app.cpp per l'icona della finestra: incorporarla nell'eseguibile
+// non basta a farla comparire sulla barra delle applicazioni.
+1 ICON "icon.ico"

@@ -1,6 +1,6 @@
 IMPULSO 2
 gravity -9.81
-nextid 330
+nextid 347
 gamemode -
 hudwidget -
 layers 6
@@ -16,9 +16,129 @@ lrow 2 1 1 1 1 1 1
 lrow 3 1 1 1 1 1 1
 lrow 4 1 1 1 1 1 1
 lrow 5 1 1 1 1 1 1
-entity 1
+entity 330
 parent 0
-name Pavimento
+name Player
+mesh 4
+meshasset -
+scale 1 1 1
+color 0.75 0.6 0.9 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 1 1 0.25 0.5 0.01 5 1
+pos 7.62755 1.4647 -3.012
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 1 0.79 0 0 0 0.449998 11.9 Audio\S_Footstep.wav
+audio_class Audio\Classes\Player.aclass
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\Player.pfb 330
+staticflags 0
+tag Player
+behavior 0 6 0 0
+comps 1 1 0
+triggercomp 0
+triggershape 0
+elayer 1
+graph Scripts\SimpleCharacterMovement.bp
+dcollapse 65
+dorder 2 3 8 6 4 5 7 9 10 11 12 13 14 15 16 17
+varov CameraBobAmplitude 0.2 0 0
+varov CameraBobAmplitude_Pitch 0.2 0 0
+varov CameraBobAmplitude_Roll 0.15 0 0
+varov CameraBobFrequency 10 0 0
+varov CameraBobFrequency_Pitch 14 0 0
+varov CameraBobFrequency_Roll 8 0 0
+varov JumpSpeed 7 0 0
+varov LookSensitivity 0.05 0 0
+varov LookSmoothness 8 0 0
+varov MovementSmoothness 10 0 0
+varov MovementSpeed 0.1 0 0
+varov Physics 24 0 0
+varov SprintSpeed 0.18 0 0
+varov StepLength 2.35 0 0
+bpcomponent 0 1 "Scripts\\Components\\BP_HealthComponent.bp"
+bpcomponentvar 0 "MaxHealth" 100 0 0
+end
+entity 331
+parent 332
+name PlayerCamera
+mesh 0
+meshasset -
+scale 0.0625 0.0625 0.0625
+color 0.4 0.85 0.95 1
+mat 48 0.35 0 0
+doublesided 0
+materialasset -
+body 1 1 0.25 0.5 0.01 0.05 1
+pos 7.62755 2.21179 -3.012
+rot 0 -0.707107 0 0.707107
+light 0 1 0.85 0.55 3 12
+camera 1 90 0 0.1 500 1 65533 1
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\Player.pfb 330
+staticflags 0
+behavior 0 6 0 0
+comps 0 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
+end
+entity 332
+parent 330
+name CameraPivot
+mesh 0
+meshasset -
+scale 0.0625 0.0625 0.0625
+color 0.42 0.45 0.5 1
+mat 24 0.12 2 0
+doublesided 0
+materialasset -
+body 1 1 0.25 0.7 0.01 0.05 1
+pos 7.62755 2.21179 -3.012
+rot 0 0 0 1
+light 0 1 0.85 0.55 3 12
+audio 0 1 0 1 1 1 25 -
+audio_class -
+audio_atten -
+audio_concurrency -
+reverb 0 8 0.45 1.2
+aiagent 0 3.5 10 360 0.15 0.5 1
+animator 0 1 1 -
+navoccluder 0 0
+inspectorevents 0
+prefabref prefab\Player.pfb 330
+staticflags 0
+behavior 0 6 0 0
+comps 0 0 0
+triggercomp 0
+triggershape 0
+elayer 0
+graph -
+dcollapse 0
+dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
+end
+entity 334
+parent 0
+name Floor
 mesh 0
 meshasset -
 scale 26 1 26
@@ -40,77 +160,9 @@ animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
 prefabref - 0
-staticflags 5
+staticflags 7
 behavior 0 6 0 0
 comps 1 1 0
-triggercomp 0
-triggershape 0
-elayer 3
-graph -
-dcollapse 8
-dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
-end
-entity 17
-parent 0
-name Pavimento
-mesh 0
-meshasset -
-scale 26 1 26
-color 0.42 0.45 0.5 1
-mat 24 0.12 2 0
-doublesided 0
-materialasset -
-body 1 1 0.25 0.7 0.01 0.05 1
-pos 13.2571 2.62061 -0.245223
-rot 0 0 0.707107 0.707107
-light 0 1 0.85 0.55 3 12
-audio 0 1 0 1 1 1 25 -
-audio_class -
-audio_atten -
-audio_concurrency -
-reverb 0 8 0.45 1.2
-aiagent 0 3.5 10 360 0.15 0.5 1
-animator 0 1 1 -
-navoccluder 0 0
-inspectorevents 0
-prefabref - 0
-staticflags 0
-behavior 0 6 0 0
-comps 1 1 0
-triggercomp 0
-triggershape 0
-elayer 0
-graph -
-dcollapse 0
-dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
-end
-entity 56
-parent 0
-name Cubo 56
-mesh 0
-meshasset -
-scale 1 3.49848 5.6991
-color 0.85 0.55 0.25 1
-mat 48 0.35 0 0
-doublesided 0
-materialasset -
-body 0 1 0.25 0.5 0.01 0.05 1
-pos -7.00787 1.28483 1.0682
-rot 0 0 0 1
-light 0 1 0.85 0.55 3 12
-audio 0 1 0 1 1 1 25 -
-audio_class -
-audio_atten -
-audio_concurrency -
-reverb 0 8 0.45 1.2
-aiagent 0 3.5 10 360 0.15 0.5 1
-animator 0 1 1 -
-navoccluder 1 1
-inspectorevents 0
-prefabref - 0
-staticflags 4
-behavior 0 6 0 0
-comps 1 0 0
 triggercomp 0
 triggershape 0
 elayer 0
@@ -118,127 +170,7 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 315
-parent 0
-name Player
-mesh 4
-meshasset -
-scale 1 1 1
-color 0.75 0.6 0.9 1
-mat 48 0.35 0 0
-doublesided 0
-materialasset -
-body 1 1 0.25 0.5 0.01 5 1
-pos -5.01418 1.00885 1.481
-rot 0 0 0 1
-light 0 1 0.85 0.55 3 12
-audio 1 0.79 0 0 0 0.449998 11.9 Audio\S_Footstep.wav
-audio_class Audio\Classes\Player.aclass
-audio_atten -
-audio_concurrency -
-reverb 0 8 0.45 1.2
-aiagent 0 3.5 10 360 0.15 0.5 1
-animator 0 1 1 -
-navoccluder 0 0
-inspectorevents 0
-prefabref prefab\Player.pfb 315
-staticflags 0
-tag Player
-behavior 0 6 0 0
-comps 1 1 0
-triggercomp 0
-triggershape 0
-elayer 1
-graph Scripts\SimpleCharacterMovement.bp
-dcollapse 5
-dorder 2 3 8 6 4 5 7 9 10 11 12 13 14 15 16 17
-varov CameraBobAmplitude 0.2 0 0
-varov CameraBobAmplitude_Pitch 0.2 0 0
-varov CameraBobAmplitude_Roll 0.15 0 0
-varov CameraBobFrequency 10 0 0
-varov CameraBobFrequency_Pitch 14 0 0
-varov CameraBobFrequency_Roll 8 0 0
-varov JumpSpeed 7 0 0
-varov LookSensitivity 0.05 0 0
-varov LookSmoothness 8 0 0
-varov MovementSmoothness 10 0 0
-varov MovementSpeed 0.1 0 0
-varov Physics 24 0 0
-varov SprintSpeed 0.18 0 0
-varov StepLength 2.35 0 0
-bpcomponent 0 0 "Scripts\\Components\\BP_HealthComponent.bp"
-bpcomponentvar 0 "MaxHealth" 100 0 0
-end
-entity 316
-parent 317
-name PlayerCamera
-mesh 0
-meshasset -
-scale 0.0625 0.0625 0.0625
-color 0.4 0.85 0.95 1
-mat 48 0.35 0 0
-doublesided 0
-materialasset -
-body 1 1 0.25 0.5 0.01 0.05 1
-pos -5.01418 1.75594 1.481
-rot 0 -0.707107 0 0.707107
-light 0 1 0.85 0.55 3 12
-camera 1 90 0 0.1 500 1 65533 1
-audio 0 1 0 1 1 1 25 -
-audio_class -
-audio_atten -
-audio_concurrency -
-reverb 0 8 0.45 1.2
-aiagent 0 3.5 10 360 0.15 0.5 1
-animator 0 1 1 -
-navoccluder 0 0
-inspectorevents 0
-prefabref prefab\Player.pfb 315
-staticflags 0
-behavior 0 6 0 0
-comps 0 0 0
-triggercomp 0
-triggershape 0
-elayer 0
-graph -
-dcollapse 0
-dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
-end
-entity 317
-parent 315
-name CameraPivot
-mesh 0
-meshasset -
-scale 0.0625 0.0625 0.0625
-color 0.42 0.45 0.5 1
-mat 24 0.12 2 0
-doublesided 0
-materialasset -
-body 1 1 0.25 0.7 0.01 0.05 1
-pos -5.01418 1.75594 1.481
-rot 0 0 0 1
-light 0 1 0.85 0.55 3 12
-audio 0 1 0 1 1 1 25 -
-audio_class -
-audio_atten -
-audio_concurrency -
-reverb 0 8 0.45 1.2
-aiagent 0 3.5 10 360 0.15 0.5 1
-animator 0 1 1 -
-navoccluder 0 0
-inspectorevents 0
-prefabref prefab\Player.pfb 315
-staticflags 0
-behavior 0 6 0 0
-comps 0 0 0
-triggercomp 0
-triggershape 0
-elayer 0
-graph -
-dcollapse 0
-dorder 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
-end
-entity 318
+entity 335
 parent 0
 name Enemy
 mesh 4
@@ -249,7 +181,7 @@ mat 48 0.35 0 0
 doublesided 0
 materialasset -
 body 1 1 0.25 0.5 0.01 0.05 1
-pos 9.23567 0.995206 0.642833
+pos -5.89004 0.957468 9.64581
 rot 0 0 0 1
 light 0 1 0.85 0.55 3 12
 audio 1 1 0 0 1 2 5.99999 Audio\SW_SwordSlash.wav
@@ -261,7 +193,7 @@ aiagent 1 3.5 10 160 1.5 1 0
 animator 1 1 1 Animations\EnemyController.animctrl
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 1 1 0
@@ -269,15 +201,15 @@ triggercomp 0
 triggershape 0
 elayer 0
 graph Scripts\Enemy.bp
-dcollapse 10250
+dcollapse 10570
 dorder 2 3 4 5 6 7 8 9 10 12 11 14 15 16 13 17
 varov AttackRange 2 0 0
-varov LeftEye 328 0 0
-varov RightEye 329 0 0
+varov LeftEye 313 0 0
+varov RightEye 314 0 0
 bpcomponent 0 1 "Scripts\\Components\\BP_AttackComponent.bp"
 end
-entity 319
-parent 320
+entity 336
+parent 337
 name SwordMesh
 mesh 0
 meshasset -
@@ -287,7 +219,7 @@ mat 48 0.35 0 0
 doublesided 0
 materialasset -
 body 0 1 0.25 0.5 0.01 0.05 1
-pos 9.85011 1.70202 -0.105167
+pos -5.2756 1.66428 8.89781
 rot -0.0868889 -0.015066 -0.783235 0.61544
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -299,7 +231,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 1 0 0
@@ -310,8 +242,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 320
-parent 323
+entity 337
+parent 340
 name SWORD
 mesh 0
 meshasset -
@@ -321,7 +253,7 @@ mat 48 0.35 0 0
 doublesided 0
 materialasset -
 body 1 1 0.3 0.5 0.01 0.05 1
-pos 9.68298 0.995206 0.00852287
+pos -5.44273 0.957468 9.0115
 rot -0.0868888 -0.0150661 -0.783235 0.615439
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -333,7 +265,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 0 0 0
@@ -344,8 +276,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 321
-parent 320
+entity 338
+parent 337
 name SwordMesh
 mesh 0
 meshasset -
@@ -355,7 +287,7 @@ mat 48 0.35 0 0
 doublesided 0
 materialasset -
 body 0 1 0.25 0.5 0.01 0.05 1
-pos 9.71812 1.14539 -0.0203171
+pos -5.40759 1.10765 8.98266
 rot 0.492392 0.424527 -0.615272 0.445834
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -367,7 +299,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 1 0 0
@@ -378,8 +310,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 322
-parent 320
+entity 339
+parent 337
 name SwordMesh
 mesh 0
 meshasset -
@@ -389,7 +321,7 @@ mat 48 0.35 0 0
 doublesided 0
 materialasset -
 body 0 1 0.25 0.5 0.01 0.05 1
-pos 9.68594 1.00811 0.00479287
+pos -5.43977 0.970372 9.00777
 rot -0.0868889 -0.015066 -0.783235 0.61544
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -401,7 +333,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 1 0 0
@@ -412,8 +344,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 323
-parent 318
+entity 340
+parent 335
 name SwordPivot
 mesh 0
 meshasset -
@@ -423,7 +355,7 @@ mat 48 0.35 0 0
 doublesided 0
 materialasset -
 body 1 1 0.3 0.5 0.01 0.05 1
-pos 9.23567 0.995206 0.642833
+pos -5.89004 0.957468 9.64581
 rot 0 -0.707107 0 0.707107
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -435,7 +367,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 0 0 0
@@ -446,8 +378,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 324
-parent 318
+entity 341
+parent 335
 name LeftEye
 mesh 1
 meshasset -
@@ -457,7 +389,7 @@ mat 90 0.6 0 0
 doublesided 0
 materialasset -
 body 0 1 0.55 0.4 0.01 0.05 1
-pos 9.53737 1.58188 0.316683
+pos -5.58834 1.54414 9.31966
 rot 0 0 0 1
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -469,7 +401,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 1 0 0
@@ -480,8 +412,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 325
-parent 318
+entity 342
+parent 335
 name LeftEye
 mesh 1
 meshasset -
@@ -491,7 +423,7 @@ mat 90 0.6 0 0
 doublesided 0
 materialasset -
 body 0 1 0.55 0.4 0.01 0.05 1
-pos 8.93397 1.58188 0.316683
+pos -6.19174 1.54414 9.31966
 rot 0 0 0 1
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -503,7 +435,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 1 0 0
@@ -514,8 +446,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 326
-parent 329
+entity 343
+parent 346
 name LeftEye
 mesh 1
 meshasset -
@@ -525,7 +457,7 @@ mat 90 0.6 0 0
 doublesided 0
 materialasset -
 body 0 1 0.55 0.4 0.01 0.05 1
-pos 9.53737 1.58188 0.166673
+pos -5.58834 1.54414 9.16965
 rot 0 0 0 1
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -537,7 +469,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 1 0 0
@@ -548,8 +480,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 327
-parent 328
+entity 344
+parent 345
 name LeftEye
 mesh 1
 meshasset -
@@ -559,7 +491,7 @@ mat 90 0.6 0 0
 doublesided 0
 materialasset -
 body 0 1 0.55 0.4 0.01 0.05 1
-pos 8.93397 1.58188 0.168143
+pos -6.19174 1.54414 9.17112
 rot 0 0 0 1
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -571,7 +503,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 1 0 0
@@ -582,8 +514,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 328
-parent 325
+entity 345
+parent 342
 name EyePivot_L
 mesh 0
 meshasset -
@@ -593,7 +525,7 @@ mat 48 0.35 0 0
 doublesided 0
 materialasset -
 body 1 1 0.3 0.5 0.01 0.05 1
-pos 8.93397 1.58188 0.316683
+pos -6.19174 1.54414 9.31966
 rot 0 0 0 1
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -605,7 +537,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 0 0 0
@@ -616,8 +548,8 @@ graph -
 dcollapse 0
 dorder 2 3 4 5 6 10 11 7 8 9 12 13 14 15 16 17
 end
-entity 329
-parent 324
+entity 346
+parent 341
 name EyePivot_R
 mesh 0
 meshasset -
@@ -627,7 +559,7 @@ mat 48 0.35 0 0
 doublesided 0
 materialasset -
 body 1 1 0.3 0.5 0.01 0.05 1
-pos 9.53737 1.58188 0.316683
+pos -5.58834 1.54414 9.31966
 rot 0 0 0 1
 light 0 1 0.85 0.55 3 12
 audio 0 1 0 1 1 1 25 -
@@ -639,7 +571,7 @@ aiagent 0 3.5 10 360 0.15 0.5 1
 animator 0 1 1 -
 navoccluder 0 0
 inspectorevents 0
-prefabref prefab\nemici\Enemy.pfb 318
+prefabref prefab\nemici\Enemy.pfb 335
 staticflags 0
 behavior 0 6 0 0
 comps 0 0 0

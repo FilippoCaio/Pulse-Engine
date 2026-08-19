@@ -9,10 +9,15 @@ Questa repository contiene due varianti/implementazioni correlate del motore di 
 
 # Pulse Engine
 
-Game engine 3D con editor, scritto in C++ per Windows. **Nessuna dipendenza esterna**:
-si compila con il solo compilatore di Visual Studio e si collega unicamente alle
-librerie di sistema — OpenGL, Win32, WIC per le immagini, WinMM per l'audio. Non c'e'
-nessun package manager da configurare, niente da scaricare prima di compilare.
+Game engine 3D con editor, scritto in C++ per Windows. Si compila con il solo
+compilatore di Visual Studio e si collega alle librerie di sistema — OpenGL, Win32,
+WIC per le immagini, WinMM per l'audio. **Niente package manager**: non c'e' niente
+da scaricare prima di compilare.
+
+L'unica libreria di terze parti sta in `native/third_party/sqlite/`, in sorgente,
+e serve alla sola finestra **Asset Manager**: la libreria di Pulse Asset Manager e'
+un database, e leggerla e' l'unico modo per cercarci dentro senza chiedere all'altro
+programma di essere aperto. Il resto del motore non la tocca.
 
 Circa 34.600 righe di C++17. Il renderer nasce dal prototipo WebGL2 che lo precede:
 gli shader GLSL sono gli stessi, portati a OpenGL 3.3 core.
@@ -50,9 +55,39 @@ native/
     animation.cpp    interpolazione delle clip
     curve.cpp        curve di animazione
     audio.cpp        riproduzione
+    asset_library.cpp lettura del catalogo di Pulse Asset Manager (.a3dlib)
   assets/icons/      icone dei tipi di asset, lette a runtime
+  third_party/sqlite/ amalgamazione sqlite3, solo per il catalogo di cui sopra
   progetto/          progetto di esempio
 ```
+
+`build.bat` compila `sqlite3.c` una volta sola e riusa `build\sqlite3.obj`: sono nove
+megabyte di C che non cambiano mai, e ricompilarli a ogni build costerebbe mezzo minuto
+per niente. Aggiornando l'amalgamazione va cancellato quell'oggetto.
+
+## Asset Manager: la libreria dentro l'editor
+
+Il pannello **Asset Manager** (menu *Windows*, accanto al Content browser) mostra la
+libreria di Pulse Asset Manager: si cerca per nome, categoria, autore o tag — tutte le
+parole scritte devono comparire, com'e' nell'altro programma — e si filtra per tipo o
+per un tag. Doppio clic su una scheda, o il pulsante *Import*, copiano i file della
+variante scelta nella cartella aperta in quel momento nel Content browser.
+
+Tre cose che vale la pena sapere:
+
+- **La variante proposta e' Source**, cioe' gli originali del DCC: fbx, obj, png, wav
+  sono i formati che questo editor sa aprire. Le varianti Unity, Unreal e Godot restano
+  selezionabili, ma i loro file (`.uasset`, `.prefab`, `.tscn`) vengono saltati con un
+  avviso nel Log, perche' qui non significherebbero niente.
+- **Un asset di piu' file si porta dietro una cartella** col proprio nome; uno di un file
+  solo entra dov'e' aperto il browser. Senza questa regola una mesh con cinque texture
+  sparpaglierebbe sei file nella cartella corrente.
+- **Da qui non si scrive mai** sul catalogo: tag, voti e varianti si modificano in Pulse
+  Asset Manager, che e' il proprietario del database. L'elenco si aggiorna da solo quando
+  quel file viene scritto, senza bisogno di premere *Refresh*.
+
+Se la libreria non c'e' — Pulse Asset Manager non installato, o mai aperto — il pannello
+lo dice e il resto dell'editor funziona come prima.
 
 ## Editor o gioco: decide un file
 

@@ -21,6 +21,7 @@
 #include "live_session.h"
 #include "engine_update.h"
 #include "engine_version.h"
+#include "asset_library.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -433,6 +434,17 @@ struct App {
     std::string dropHoverRel;                 // folder-tree row hovered during a drag
     bool dropHoverValid = false;              // dropHoverRel is hovered THIS frame
     std::string dropTileName;                 // folder tile hovered during a drag
+
+    // Asset Manager window: the Pulse Asset Manager library, read from here
+    AssetLibrary assetLib;
+    char assetLibSearch[96] = "";
+    int64_t assetLibSelected = 0;             // assets.id of the selected asset
+    int assetLibVariant = 0;                  // variant index within that asset
+    int assetLibKind = -1;                    // -1 every kind, else A3D_MODEL/SOUND/TEXTURE
+    std::string assetLibTag;                  // active tag filter ("" = none)
+    float assetLibTileHeight = 96;
+    std::map<int64_t, GLuint> assetLibThumbs; // asset id → preview already uploaded
+    uint64_t assetLibNextPoll = 0;            // next moment we look at the file's date
 
     std::string clipboard;                    // serialized subtree for Ctrl+C/V
     bool addCompOpen = false;                 // inspector "add component" accordion
@@ -9425,11 +9437,345 @@ static void drawAnimatorContent(UI& ui) {
     ui.registerBlockingRect(inspectorSplitter);
 }
 
+// ─── Asset Manager: la libreria di Pulse Asset Manager dentro l'editor ───
+//
+// Stessa idea del resto della suite: l'editor non incastra la finestra
+// dell'altro programma, ne rilegge il catalogo e ne disegna l'elenco. Da qui si
+// cerca e si importa; tag, voti e varianti si modificano di la', dove sta chi
+// possiede il database.
+
+static void assetLibraryDropThumbnails() {
+    for (auto& thumb : g.assetLibThumbs)
+        if (thumb.second) glDeleteTextures(1, &thumb.second);
+    g.assetLibThumbs.clear();
+}
+
+static void assetLibraryReload(bool announce) {
+    assetLibraryDropThumbnails();      // appartengono alla lettura precedente
+    const bool ok = g.assetLib.refresh();
+    if (announce) {
+        if (ok) addLog(1, "Asset library: %d assets.", (int)g.assetLib.assets.size());
+        else addLog(2, "%s", g.assetLib.error.c_str());
+    }
+    // Un asset cancellato dall'altro programma lascerebbe selezionato un id che
+    // non esiste piu', e la colonna dei dettagli disegnerebbe il vuoto.
+    bool alive = false;
+    for (const A3DAsset& a : g.assetLib.assets)
+        if (a.id == g.assetLibSelected) { alive = true; break; }
+    if (!alive) { g.assetLibSelected = 0; g.assetLibVariant = 0; }
+}
+
+// Tutte le parole devono comparire da qualche parte: e' l'AND implicito della
+// ricerca dell'altro programma, e qui basta.
+static bool assetLibraryMatches(const A3DAsset& a) {
+    if (g.assetLibKind >= 0 && a.kind != g.assetLibKind) return false;
+    if (!g.assetLibTag.empty()) {
+        bool tagged = false;
+        for (const std::string& t : a.tags)
+            if (_stricmp(t.c_str(), g.assetLibTag.c_str()) == 0) { tagged = true; break; }
+        if (!tagged) return false;
+    }
+    std::string word;
+    for (const char* c = g.assetLibSearch;; c++) {
+        if (*c && *c != ' ') { word.push_back((char)tolower((unsigned char)*c)); continue; }
+        if (!word.empty() && a.haystack.find(word) == std::string::npos) return false;
+        word.clear();
+        if (!*c) break;
+    }
+    return true;
+}
+
+static std::string assetLibraryFileName(const std::string& rel) {
+    size_t cut = rel.find_last_of("/\\");
+    return cut == std::string::npos ? rel : rel.substr(cut + 1);
+}
+
+// Il nome con cui il file entra nel progetto. Il catalogo e' in UTF-8, mentre il
+// browser dell'editor lavora con stringhe strette e il suo font si ferma
+// all'ASCII: un nome accentato si vedrebbe a punti interrogativi e non
+// tornerebbe indietro uguale quando la cartella viene riletta. Meglio un nome
+// ASCII deciso qui che una discrepanza silenziosa fra disco e pannello.
+static std::string assetLibrarySafeName(const std::string& utf8) {
+    std::string out;
+    for (unsigned char c : utf8) {
+        if (c >= 0x80 || c < 32 || strchr("\\/:*?\"<>|", (char)c)) {
+            if (!out.empty() && out.back() != '_') out.push_back('_');
+        } else out.push_back((char)c);
+    }
+    while (!out.empty() && (out.back() == ' ' || out.back() == '.' || out.back() == '_')) out.pop_back();
+    return out.empty() ? std::string("asset") : out;
+}
+
+static void assetLibraryImport(const A3DAsset& asset, const A3DVariant& variant) {
+    if (g.projectDir.empty()) { addLog(2, "Open a project before importing."); return; }
+
+    std::vector<const A3DFile*> usable;
+    int unsupported = 0;
+    for (const A3DFile& f : variant.files) {
+        if (importableAssetExtension("." + f.ext)) usable.push_back(&f);
+        else unsupported++;
+    }
+    if (usable.empty()) {
+        addLog(2, "%s: the %s variant has nothing this engine can open (%d files skipped).",
+               asset.name.c_str(), a3dEngineName(variant.engine), unsupported);
+        return;
+    }
+
+    // Un asset di un file solo entra dov'e' aperto il browser; uno fatto di mesh
+    // piu' texture si porta dietro una cartella, altrimenti sparpaglia mezza
+    // libreria nella cartella corrente.
+    std::string destDir = curDirAbs(), createdRel;
+    if (usable.size() > 1) {
+        std::string folder = uniqueDest(destDir, assetLibrarySafeName(asset.name));
+        std::error_code ec;
+        fs::create_directories(destDir + "\\" + folder, ec);
+        if (ec) { addLog(2, "Could not create %s: %s", folder.c_str(), ec.message().c_str()); return; }
+        destDir += "\\" + folder;
+        createdRel = relJoin(g.curRel, folder);
+    }
+
+    int copied = 0;
+    std::string lastRel;
+    for (const A3DFile* f : usable) {
+        std::string name = uniqueDest(destDir, assetLibrarySafeName(assetLibraryFileName(f->relPath)));
+        std::error_code ec;
+        // La sorgente passa per un percorso a caratteri larghi: i percorsi del
+        // catalogo sono UTF-8, e std::filesystem costruito da una stringa
+        // stretta li leggerebbe nella codepage ANSI.
+        fs::copy_file(fs::path(a3dWiden(g.assetLib.absolutePath(f->relPath))),
+                      fs::path(destDir + "\\" + name), fs::copy_options::none, ec);
+        if (ec) {
+            addLog(2, "Import failed for %s: %s", name.c_str(), ec.message().c_str());
+            continue;
+        }
+        copied++;
+        if (createdRel.empty()) lastRel = relJoin(g.curRel, name);
+    }
+
+    scanBrowser();
+    if (!createdRel.empty()) browserSetSingleSelectionRel(createdRel);
+    else if (!lastRel.empty()) browserSetSingleSelectionRel(lastRel);
+
+    if (copied)
+        addLog(1, "%s: %d files imported into %s.", asset.name.c_str(), copied,
+               g.curRel.empty() ? g.projectName.c_str() : g.curRel.c_str());
+    if (unsupported)
+        addLog(0, "%d files skipped: format this engine does not open.", unsupported);
+}
+
+static void drawAssetLibraryContent(UI& ui) {
+    const Vec3 dim{ 0.55f, 0.59f, 0.66f }, accent{ 0.30f, 0.62f, 0.99f }, warn{ 0.95f, 0.72f, 0.35f };
+    const UIInput& in = ui.input();
+
+    // La libreria si rilegge da sola: il controllo costa la data di due file e
+    // non una query, e cosi' un asset appena aggiunto di la' compare qui senza
+    // che nessuno debba premere niente.
+    const uint64_t now = GetTickCount64();
+    if (now >= g.assetLibNextPoll) {
+        g.assetLibNextPoll = now + 1500;
+        if (!g.assetLib.loaded || g.assetLib.changedOnDisk()) assetLibraryReload(false);
+    }
+
+    if (!g.assetLib.loaded) {
+        ui.label(g.assetLib.error.empty() ? "Reading the library..." : g.assetLib.error, warn);
+        ui.label("Pulse Asset Manager keeps its catalogue in a .a3dlib file.", dim);
+        ui.label("Open the app once and the library shows up here.", dim);
+        if (ui.button("Retry now")) assetLibraryReload(true);
+        return;
+    }
+
+    ui.label("SEARCH  (name, category, author, tags — every word must match)", accent);
+    ui.textInput("assetlib_search", g.assetLibSearch, sizeof(g.assetLibSearch));
+
+    std::vector<const A3DAsset*> shown;
+    std::map<std::string, int> tagCounts;
+    for (const A3DAsset& a : g.assetLib.assets) {
+        for (const std::string& t : a.tags) tagCounts[t]++;
+        if (assetLibraryMatches(a)) shown.push_back(&a);
+    }
+
+    UIRect pin = ui.panelInner();
+    const float leftW = 156, rightW = pin.w > 620 ? 250.0f : 0.0f;
+    ui.beginColumns(leftW, rightW);
+
+    // ── filtri ──
+    // La rilettura si rimanda a fine funzione: `shown` punta dentro il vettore
+    // degli asset, e ricaricarlo adesso lascerebbe la griglia qui sotto a
+    // disegnare puntatori morti.
+    bool reloadRequested = ui.button("Refresh");
+    ui.label("KIND", accent);
+    static const char* kindLabels[] = { "3D models", "Sounds", "Textures" };
+    if (ui.selectable("assetlib_kind_all", "Everything", g.assetLibKind < 0)) g.assetLibKind = -1;
+    for (int k = 0; k < A3D_KIND_COUNT; k++) {
+        char id[32];
+        snprintf(id, sizeof(id), "assetlib_kind%d", k);
+        if (ui.selectable(id, kindLabels[k], g.assetLibKind == k)) g.assetLibKind = g.assetLibKind == k ? -1 : k;
+    }
+    if (!tagCounts.empty()) {
+        ui.label("TAGS", accent);
+        // I tag piu' usati per primi: quelli con una voce sola sono rumore in
+        // una colonna alta quanto il pannello.
+        std::vector<std::pair<std::string, int>> tags(tagCounts.begin(), tagCounts.end());
+        std::sort(tags.begin(), tags.end(), [](const auto& x, const auto& y) {
+            return x.second != y.second ? x.second > y.second : x.first < y.first;
+        });
+        if (tags.size() > 18) tags.resize(18);
+        for (const auto& tag : tags) {
+            char id[96];
+            snprintf(id, sizeof(id), "assetlib_tag_%s", tag.first.c_str());
+            std::string row = tag.first + "  " + std::to_string(tag.second);
+            if (ui.selectable(id, row, g.assetLibTag == tag.first))
+                g.assetLibTag = g.assetLibTag == tag.first ? std::string() : tag.first;
+        }
+    }
+
+    // ── griglia ──
+    ui.nextColumn();
+    char heading[96];
+    snprintf(heading, sizeof(heading), "LIBRARY  %d / %d  (double click: import)", (int)shown.size(),
+             (int)g.assetLib.assets.size());
+    ui.label(heading, accent);
+    if (shown.empty())
+        ui.label(g.assetLib.assets.empty() ? "The library is empty." : "Nothing matches these filters.", dim);
+
+    // Le anteprime si caricano poche per fotogramma: aprire la finestra su una
+    // libreria intera significherebbe altrimenti decodificare centinaia di PNG
+    // in un colpo, e si vedrebbe.
+    int thumbBudget = 4;
+    const float contentW = (std::max)(90.0f, pin.w - leftW - rightW - (rightW > 0 ? 36.0f : 30.0f));
+    const int cols = (std::max)(1, (int)(contentW / (g.assetLibTileHeight + 12.0f)));
+    for (size_t i = 0; i < shown.size(); i += cols) {
+        const int n = (int)(std::min)((size_t)cols, shown.size() - i);
+        ui.row(cols);
+        for (int k = 0; k < n; k++) {
+            const A3DAsset& a = *shown[i + k];
+            char id[48], key[48];
+            snprintf(id, sizeof(id), "assetlib_%lld", (long long)a.id);
+            snprintf(key, sizeof(key), "a3dthumb_%lld", (long long)a.id);
+
+            const char* image = a.kind == A3D_TEXTURE ? "texture" : a.kind == A3D_SOUND ? "audio_wav" : "mesh_fbx";
+            if (!a.thumbRel.empty()) {
+                auto thumb = g.assetLibThumbs.find(a.id);
+                if (thumb == g.assetLibThumbs.end() && thumbBudget > 0) {
+                    thumbBudget--;
+                    // 0 anche quando fallisce: senza segnare l'esito ci si
+                    // riproverebbe a ogni fotogramma, per sempre.
+                    thumb = g.assetLibThumbs.emplace(
+                        a.id, g.renderer.loadPngTexture(g.assetLib.absolutePath(a.thumbRel))).first;
+                }
+                if (thumb != g.assetLibThumbs.end() && thumb->second) {
+                    ui.setAssetIcon(key, thumb->second);
+                    image = key;
+                }
+            }
+
+            const int res = ui.iconTile(id, a.name, 1, g.assetLibSelected == a.id, g.assetLibTileHeight,
+                                        true, nullptr, image);
+            if (res & UI::TILE_HOVERED) {
+                std::string tip = a.name + "\n" + a3dKindName(a.kind);
+                if (!a.category.empty()) tip += "  |  " + a.category;
+                if (!a.tags.empty()) {
+                    tip += "\n";
+                    for (const std::string& t : a.tags) tip += " " + t;
+                }
+                ui.showTip(tip);
+            }
+            if (res & (UI::TILE_CLICK | UI::TILE_DBLCLICK)) {
+                if (g.assetLibSelected != a.id) {
+                    g.assetLibSelected = a.id;
+                    g.assetLibVariant = (std::max)(0, a.defaultVariant());
+                }
+            }
+            if (res & UI::TILE_DBLCLICK) {
+                if (g.assetLibVariant >= 0 && g.assetLibVariant < (int)a.variants.size())
+                    assetLibraryImport(a, a.variants[g.assetLibVariant]);
+                else addLog(2, "%s has no variant to import.", a.name.c_str());
+            }
+        }
+        for (int k = n; k < cols; k++) ui.spacing(g.assetLibTileHeight);
+    }
+
+    // Ctrl+rotella cambia la dimensione delle miniature, come nel Content browser.
+    if (in.keyCtrl && in.wheel != 0 && in.mouseX > pin.x + leftW && in.mouseX < pin.x + pin.w - rightW &&
+        in.mouseY >= pin.y && in.mouseY < pin.y + pin.h) {
+        g.assetLibTileHeight = clampf(g.assetLibTileHeight + in.wheel * 8.0f, 64.0f, 144.0f);
+        ui.consumeWheel();
+    }
+
+    // ── dettagli e import ──
+    if (rightW > 0) {
+        ui.nextColumn();
+        const A3DAsset* sel = nullptr;
+        for (const A3DAsset* a : shown)
+            if (a->id == g.assetLibSelected) { sel = a; break; }
+
+        if (!sel) {
+            ui.label("SELECTION", accent);
+            ui.label("Pick an asset to see what", dim);
+            ui.label("it is made of.", dim);
+        } else {
+            ui.label("SELECTION", accent);
+            ui.labelWrapped(sel->name, { 0.92f, 0.94f, 0.98f });
+            ui.label(a3dKindName(sel->kind), dim);
+            if (!sel->category.empty()) ui.label("Category: " + sel->category, dim);
+            if (!sel->author.empty()) ui.label("Author: " + sel->author, dim);
+            if (sel->rating > 0) ui.label(std::string(sel->rating, '*'), { 1.0f, 0.80f, 0.35f });
+            if (!sel->tags.empty()) {
+                std::string tags;
+                for (const std::string& t : sel->tags) tags += (tags.empty() ? "" : ", ") + t;
+                ui.labelWrapped(tags, { 0.62f, 0.72f, 0.88f });
+            }
+
+            if (sel->variants.empty()) {
+                ui.label("No variant: nothing to import.", warn);
+            } else {
+                if (g.assetLibVariant >= (int)sel->variants.size()) g.assetLibVariant = 0;
+                std::vector<std::string> labels;
+                std::vector<const char*> items;
+                for (const A3DVariant& v : sel->variants)
+                    labels.push_back(std::string(a3dEngineName(v.engine)) + "  (" +
+                                     std::to_string(v.files.size()) + " files)");
+                for (const std::string& l : labels) items.push_back(l.c_str());
+                ui.combo("Variant", &g.assetLibVariant, items.data(), (int)items.size());
+
+                const A3DVariant& variant = sel->variants[g.assetLibVariant];
+                int usable = 0;
+                for (const A3DFile& f : variant.files)
+                    if (importableAssetExtension("." + f.ext)) usable++;
+
+                int listed = 0;
+                for (const A3DFile& f : variant.files) {
+                    if (listed++ >= 6) { ui.label("...", dim); break; }
+                    const bool ok = importableAssetExtension("." + f.ext);
+                    ui.label(ui.ellipsize(assetLibraryFileName(f.relPath), rightW - 18),
+                             ok ? dim : Vec3{ 0.45f, 0.42f, 0.40f });
+                }
+                if (usable < (int)variant.files.size())
+                    ui.label(std::to_string((int)variant.files.size() - usable) + " unsupported here", dim);
+
+                if (g.projectDir.empty()) {
+                    ui.label("Open a project to import.", warn);
+                } else {
+                    char label[128];
+                    snprintf(label, sizeof(label), "Import into %s",
+                             g.curRel.empty() ? g.projectName.c_str() : g.curRel.c_str());
+                    if (usable == 0) ui.label("Nothing this engine can open.", warn);
+                    else if (ui.button(label)) assetLibraryImport(*sel, variant);
+                }
+            }
+        }
+    }
+
+    ui.endColumns();
+    if (reloadRequested) assetLibraryReload(true);
+}
+
 static void windowContent(UI& ui, const std::string& id) {
     if (id == "outliner") drawOutlinerContent(ui);
     else if (id == "dettagli") drawDetailsContent(ui);
     else if (id == "log") drawLogContent(ui);
     else if (id == "contenuti") drawContenutiContent(ui);
+    else if (id == "assetlib") drawAssetLibraryContent(ui);
     else if (id == "navigation") drawNavigationContent(ui);
     else if (id == "animation") drawAnimationContent(ui);
     else if (id == "animator") drawAnimatorContent(ui);
@@ -9822,9 +10168,9 @@ static void drawMenuBar() {
         ui.menuEnd();
     }
     if (ui.menuBegin("Windows")) {
-        const char* ids[9] = { "viewport", "outliner", "dettagli", "log", "contenuti", "navigation", "animation", "animator", "help" };
-        const char* titles[9] = { "Viewport", "Outliner", "Details", "Log", "Content", "Navigation", "Animation", "Animator Controller", "Help & Updates" };
-        for (int i = 0; i < 9; i++) {
+        const char* ids[10] = { "viewport", "outliner", "dettagli", "log", "contenuti", "assetlib", "navigation", "animation", "animator", "help" };
+        const char* titles[10] = { "Viewport", "Outliner", "Details", "Log", "Content", "Asset Manager", "Navigation", "Animation", "Animator Controller", "Help & Updates" };
+        for (int i = 0; i < 10; i++) {
             DockWindow* w = g.dock.find(ids[i]);
             char label[64];
             snprintf(label, sizeof(label), "%s %s", w && w->open ? "[x]" : "[  ]", titles[i]);
@@ -10160,41 +10506,141 @@ static void drawContentDrawers(UI& ui) {
 }
 
 // ═══ hub screen (project launcher) ═══
+//
+// Il renderer conosce quattro cose: rettangoli, triangoli, linee e testo.
+// Tutto il resto — angoli smussati, sfumature, filetti di luce — si compone
+// con quelle, ed e' il motivo per cui qui ci sono piccoli aiutanti invece di
+// una chiamata sola: non esiste una drawRoundRect da chiamare.
 static void drawHub() {
     UI& ui = g.ui;
     Renderer* r = ui.r;
     const UIInput& in = ui.input();
     float W = (float)g.width, H = (float)g.height;
 
-    r->drawRectPx(0, 0, W, H, { 0.07f, 0.08f, 0.10f }, 1);
-    r->drawRectPx(0, 0, W, 74, { 0.10f, 0.11f, 0.14f }, 1);
-    r->drawRectPx(0, 74, W, 2, { 0.05f, 0.055f, 0.065f }, 1);
-    r->drawTextLine(40, 18, "PULSE", { 0.30f, 0.62f, 0.99f }, 1, 2.4f);
-    r->drawTextLine(44, 48, "Project hub", { 0.6f, 0.66f, 0.74f }, 1);
+    const Vec3 ACCENT{ 0.30f, 0.62f, 0.99f };
+    auto mix = [](Vec3 a, Vec3 b, float t) {
+        return Vec3{ a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t };
+    };
+
+    // Sfondo a fasce: una sfumatura appena percettibile dall'alto al basso.
+    // Un fondo piatto fa sembrare piatto anche tutto quello che ci sta sopra.
+    const Vec3 BG_TOP{ 0.076f, 0.086f, 0.106f }, BG_BOT{ 0.042f, 0.048f, 0.061f };
+    auto bgAt = [&](float yy) { return mix(BG_TOP, BG_BOT, clampf(yy / H, 0.0f, 1.0f)); };
+    const int BANDS = 40;
+    for (int i = 0; i < BANDS; i++) {
+        float y0 = H * i / BANDS, y1 = H * (i + 1) / BANDS;
+        r->drawRectPx(0, y0, W, y1 - y0 + 1, bgAt((y0 + y1) * 0.5f), 1);
+    }
+
+    // Angoli tagliati a 45 gradi: si ottengono coprendo i quattro spigoli con
+    // il colore di cio' che sta dietro, che qui cambia con l'altezza.
+    auto chamfer = [&](const UIRect& rc, float c, Vec3 around) {
+        r->drawTriPx(rc.x, rc.y, rc.x + c, rc.y, rc.x, rc.y + c, around, 1);
+        r->drawTriPx(rc.x + rc.w, rc.y, rc.x + rc.w - c, rc.y, rc.x + rc.w, rc.y + c, around, 1);
+        r->drawTriPx(rc.x, rc.y + rc.h, rc.x + c, rc.y + rc.h, rc.x, rc.y + rc.h - c, around, 1);
+        r->drawTriPx(rc.x + rc.w, rc.y + rc.h, rc.x + rc.w - c, rc.y + rc.h, rc.x + rc.w, rc.y + rc.h - c, around, 1);
+    };
+    auto hits = [&](const UIRect& rc) {
+        return in.mouseX >= rc.x && in.mouseX < rc.x + rc.w && in.mouseY >= rc.y && in.mouseY < rc.y + rc.h;
+    };
+
+    // ── intestazione ────────────────────────────────────────────────────────
+    const float HEAD_H = 92;
+    r->drawRectPx(0, 0, W, HEAD_H, { 0.105f, 0.116f, 0.146f }, 1);
+    // La riga di base parte dall'accento e si spegne verso destra: dice da che
+    // parte sta il marchio senza aggiungere un altro elemento alla pagina.
+    const int SEG = 56;
+    for (int i = 0; i < SEG; i++) {
+        float t = (float)i / (SEG - 1);
+        r->drawRectPx(W * i / SEG, HEAD_H, W / SEG + 1, 2, mix(ACCENT, Vec3{ 0.05f, 0.055f, 0.07f }, t * t), 1);
+    }
+
+    // Il marchio dell'engine: la stessa onda dell'icona dell'eseguibile, sulla
+    // stessa griglia di 32. Non sono le tre barre di Pulse Hub di proposito —
+    // sono due programmi, e devono somigliarsi senza confondersi.
+    {
+        const float ox = 40, oy = 28, s = 34.0f / 32.0f;
+        const float wave[7][2] = {
+            { 4.5f, 16 }, { 10.5f, 16 }, { 14, 7.5f }, { 18, 24.5f }, { 21.5f, 14.5f }, { 24, 16 }, { 27.5f, 16 }
+        };
+        for (int i = 0; i < 6; i++) {
+            float x1 = ox + wave[i][0] * s, y1 = oy + wave[i][1] * s;
+            float x2 = ox + wave[i + 1][0] * s, y2 = oy + wave[i + 1][1] * s;
+            // Il colore segue l'altezza, come nell'icona: chiaro sulla cresta,
+            // piu' cupo dove l'onda scende.
+            float t = clampf(((y1 + y2) * 0.5f - oy - 6 * s) / (20 * s), 0.0f, 1.0f);
+            r->drawLinePx(x1, y1, x2, y2, 3.4f, mix({ 0.54f, 0.93f, 1.0f }, { 0.12f, 0.62f, 0.88f }, t), 1);
+        }
+    }
+
+    // "PULSE" a 1.9 occupa 32 pixel di altezza: il sottotitolo va sotto quelli,
+    // non dentro. Prima si sovrapponevano.
+    r->drawTextLine(86, 26, "PULSE", { 0.88f, 0.93f, 1.0f }, 1, 1.9f);
+    r->drawTextLine(88, 62, "Project hub", { 0.47f, 0.54f, 0.65f }, 1, 0.95f);
+
+    std::string ver = std::string("engine ") + IMPULSO_ENGINE_VERSION;
+    r->drawTextLine(W - 40 - r->textWidth(ver, 0.95f), 62, ver, { 0.34f, 0.40f, 0.50f }, 1, 0.95f);
 
     float cardW = clampf(W - 220, 520, 940);
     float cx = (W - cardW) * 0.5f;
-    float y = 104;
+    float y = HEAD_H + 34;
 
-    auto actionBtn = [&](float bx, float bw, const char* label, Vec3 bg) -> bool {
-        UIRect rc = { bx, y, bw, 46 };
-        bool over = in.mouseX >= rc.x && in.mouseX < rc.x + rc.w && in.mouseY >= rc.y && in.mouseY < rc.y + rc.h;
-        r->drawRectPx(rc.x, rc.y, rc.w, rc.h, over ? bg * 1.3f : bg, 1);
+    // ── i tre modi di cominciare ────────────────────────────────────────────
+    const float BTN_H = 54;
+    auto actionBtn = [&](float bx, float bw, const char* label, Vec3 bg, int icon) -> bool {
+        UIRect rc = { bx, y, bw, BTN_H };
+        bool over = hits(rc);
+        Vec3 fill = over ? bg * 1.35f : bg;
+        r->drawRectPx(rc.x, rc.y, rc.w, rc.h, fill, 1);
+        chamfer(rc, 7, bgAt(rc.y + rc.h * 0.5f));
+        // Un filo chiaro sopra e uno scuro sotto: bastano due pixel per
+        // togliere a un rettangolo l'aria di ritaglio di cartone.
+        r->drawRectPx(rc.x + 7, rc.y, rc.w - 14, 1, fill * 1.8f, over ? 0.95f : 0.6f);
+        r->drawRectPx(rc.x + 7, rc.y + rc.h - 1, rc.w - 14, 1, { 0, 0, 0 }, 0.35f);
+
+        const Vec3 fg{ 0.93f, 0.96f, 1.0f };
+        const float iconW = 18, gap = 11;
         float tw = r->textWidth(label);
-        r->drawTextLine(rc.x + (rc.w - tw) * 0.5f, ui.textCenterY(rc), label, { 0.92f, 0.95f, 1.0f }, 1);
+        float ix = rc.x + (rc.w - (iconW + gap + tw)) * 0.5f;
+        float cy = rc.y + rc.h * 0.5f;
+        if (icon == 0) {              // piu'
+            r->drawRectPx(ix, cy - 1.5f, 17, 3, fg, 1);
+            r->drawRectPx(ix + 7, cy - 8, 3, 16, fg, 1);
+        } else if (icon == 1) {       // cartella
+            r->drawRectPx(ix, cy - 8, 8, 4, fg, 1);
+            r->drawRectPx(ix, cy - 5, 17, 13, fg, 1);
+            r->drawRectPx(ix + 2, cy - 3, 13, 9, fill, 1);
+        } else {                      // tacche di segnale: la sessione condivisa
+            r->drawRectPx(ix + 1, cy + 2, 4, 6, fg, 1);
+            r->drawRectPx(ix + 7, cy - 3, 4, 11, fg, 1);
+            r->drawRectPx(ix + 13, cy - 8, 4, 16, fg, 1);
+        }
+        r->drawTextLine(ix + iconW + gap, ui.textCenterY(rc), label, fg, 1);
         return over && in.mousePressed;
     };
     float thirdW = (cardW - 24) / 3.0f;
-    bool doCreate = actionBtn(cx, thirdW, "+  Create project...", { 0.16f, 0.34f, 0.20f });
-    bool doConnect = actionBtn(cx + thirdW + 12, thirdW, "Add existing...", { 0.18f, 0.28f, 0.44f });
-    bool doLiveJoin = actionBtn(cx + (thirdW + 12) * 2, thirdW, "Join live project...", { 0.28f, 0.20f, 0.48f });
-    y += 62;
+    bool doCreate = actionBtn(cx, thirdW, "Create project...", { 0.16f, 0.36f, 0.22f }, 0);
+    bool doConnect = actionBtn(cx + thirdW + 12, thirdW, "Add existing...", { 0.17f, 0.29f, 0.46f }, 1);
+    bool doLiveJoin = actionBtn(cx + (thirdW + 12) * 2, thirdW, "Join live project...", { 0.30f, 0.20f, 0.50f }, 2);
+    y += BTN_H + 28;
 
-    r->drawTextLine(cx, y, "RECENT PROJECTS", { 0.5f, 0.55f, 0.62f }, 1);
-    y += 22;
+    // ── titolo della lista ──────────────────────────────────────────────────
+    const char* secLabel = "RECENT PROJECTS";
+    r->drawTextLine(cx, y, secLabel, { 0.46f, 0.52f, 0.62f }, 1, 0.95f);
+    float secW = r->textWidth(secLabel, 0.95f);
+    char cnt[16];
+    snprintf(cnt, sizeof(cnt), "%d", (int)g.hubProjects.size());
+    UIRect pill = { cx + secW + 10, y - 1, r->textWidth(cnt, 0.9f) + 14, 18 };
+    r->drawRectPx(pill.x, pill.y, pill.w, pill.h, { 0.145f, 0.165f, 0.205f }, 1);
+    chamfer(pill, 4, bgAt(pill.y));
+    r->drawTextLine(pill.x + 7, y, cnt, { 0.56f, 0.63f, 0.73f }, 1, 0.9f);
+    float lineX = pill.x + pill.w + 12;
+    r->drawRectPx(lineX, y + 8, cx + cardW - lineX, 1, { 0.16f, 0.19f, 0.23f }, 1);
+    y += 30;
 
+    // ── la lista ────────────────────────────────────────────────────────────
     float listTop = y, listBot = H - 26;
-    const float rowH = 56, rowGap = 8;
+    const float rowH = 64, rowGap = 8;
     if (in.wheel != 0 && in.mouseY > listTop) g.hubScroll += in.wheel * 40;
     float contentH = g.hubProjects.size() * (rowH + rowGap);
     float minScroll = (listBot - listTop) - contentH;
@@ -10203,9 +10649,28 @@ static void drawHub() {
 
     r->setUIScissor(cx, listTop, cardW, listBot - listTop, true);
     if (g.hubProjects.empty()) {
-        r->drawTextLine(cx + 6, listTop + 18, "No projects. Create or add a project to get started.",
-                        { 0.5f, 0.54f, 0.6f }, 1);
+        // Il vuoto va disegnato, non lasciato: un riquadro tratteggiato dice
+        // "qui ci andranno i progetti", uno spazio bianco non dice niente.
+        UIRect ec = { cx, listTop + 6, cardW, 126 };
+        r->drawRectPx(ec.x, ec.y, ec.w, ec.h, { 0.082f, 0.093f, 0.114f }, 1);
+        chamfer(ec, 8, bgAt(ec.y + ec.h * 0.5f));
+        const Vec3 dash{ 0.21f, 0.25f, 0.31f };
+        for (float dx = 0; dx < ec.w; dx += 14) {
+            float seg = ec.w - dx < 7 ? ec.w - dx : 7;
+            r->drawRectPx(ec.x + dx, ec.y, seg, 1, dash, 1);
+            r->drawRectPx(ec.x + dx, ec.y + ec.h - 1, seg, 1, dash, 1);
+        }
+        for (float dy = 0; dy < ec.h; dy += 14) {
+            float seg = ec.h - dy < 7 ? ec.h - dy : 7;
+            r->drawRectPx(ec.x, ec.y + dy, 1, seg, dash, 1);
+            r->drawRectPx(ec.x + ec.w - 1, ec.y + dy, 1, seg, dash, 1);
+        }
+        const char* m1 = "No projects yet";
+        const char* m2 = "Create one, or point the hub at a folder you already have.";
+        r->drawTextLine(ec.x + (ec.w - r->textWidth(m1, 1.3f)) * 0.5f, ec.y + 40, m1, { 0.70f, 0.76f, 0.85f }, 1, 1.3f);
+        r->drawTextLine(ec.x + (ec.w - r->textWidth(m2, 0.9f)) * 0.5f, ec.y + 72, m2, { 0.46f, 0.52f, 0.61f }, 1, 0.9f);
     }
+
     float ry = listTop + g.hubScroll;
     int openReq = -1, removeReq = -1;
     for (int i = 0; i < (int)g.hubProjects.size(); i++) {
@@ -10216,20 +10681,72 @@ static void drawHub() {
         std::error_code ec;
         bool exists = fs::exists(p.path, ec);
         bool inList = in.mouseY > listTop && in.mouseY < listBot;
-        bool over = inList && in.mouseX >= rc.x && in.mouseX < rc.x + rc.w && in.mouseY >= rc.y && in.mouseY < rc.y + rc.h;
-        UIRect xr = { rc.x + rc.w - 36, rc.y + rc.h * 0.5f - 13, 26, 26 };
-        bool overX = over && in.mouseX >= xr.x && in.mouseX < xr.x + xr.w && in.mouseY >= xr.y && in.mouseY < xr.y + xr.h;
-        r->drawRectPx(rc.x, rc.y, rc.w, rc.h, over ? Vec3{ 0.15f, 0.17f, 0.21f } : Vec3{ 0.11f, 0.125f, 0.15f }, 1);
-        if (over) r->drawRectPx(rc.x, rc.y, 3, rc.h, { 0.30f, 0.62f, 0.99f }, 1);
-        r->drawTextLine(rc.x + 18, rc.y + 9, p.name, exists ? Vec3{ 0.9f, 0.94f, 1.0f } : Vec3{ 0.92f, 0.55f, 0.55f }, 1, 1.2f);
-        std::string sub = ui.ellipsize(exists ? p.path : (p.path + "   (folder not found)"), cardW - 70);
-        r->drawTextLine(rc.x + 18, rc.y + 32, sub, { 0.55f, 0.6f, 0.68f }, 1, 0.9f);
-        r->drawRectPx(xr.x, xr.y, xr.w, xr.h, overX ? Vec3{ 0.4f, 0.16f, 0.16f } : Vec3{ 0.16f, 0.17f, 0.2f }, 1);
-        r->drawTextLine(xr.x + 9, xr.y + 5, "x", overX ? Vec3{ 1, 0.7f, 0.7f } : Vec3{ 0.6f, 0.65f, 0.72f }, 1);
+        bool over = inList && hits(rc);
+        UIRect xr = { rc.x + rc.w - 42, rc.y + rc.h * 0.5f - 13, 26, 26 };
+        bool overX = over && hits(xr);
+
+        Vec3 rowBg = over ? Vec3{ 0.146f, 0.166f, 0.206f } : Vec3{ 0.098f, 0.112f, 0.137f };
+        r->drawRectPx(rc.x, rc.y, rc.w, rc.h, rowBg, 1);
+        chamfer(rc, 7, bgAt(rc.y + rc.h * 0.5f));
+        if (over) r->drawRectPx(rc.x, rc.y + 7, 3, rc.h - 14, ACCENT, 1);
+
+        // Tessera con l'iniziale, tinta da un'impronta del nome: progetti
+        // diversi non finiscono mai dello stesso colore, e lo stesso progetto
+        // ce l'ha uguale a ogni avvio. Serve a distinguerli con la coda
+        // dell'occhio, prima ancora di leggere.
+        unsigned hash = 2166136261u;
+        for (char ch : p.name) hash = (hash ^ (unsigned char)ch) * 16777619u;
+        Vec3 tile = exists ? Vec3{ 0.16f + (hash & 63) / 210.0f,
+                                   0.28f + ((hash >> 6) & 63) / 260.0f,
+                                   0.42f + ((hash >> 12) & 63) / 230.0f }
+                           : Vec3{ 0.34f, 0.16f, 0.17f };
+        UIRect tl = { rc.x + 15, rc.y + 12, 40, 40 };
+        r->drawRectPx(tl.x, tl.y, tl.w, tl.h, tile, 1);
+        chamfer(tl, 5, rowBg);
+        char ch0 = p.name.empty() ? '?' : p.name[0];
+        if (ch0 >= 'a' && ch0 <= 'z') ch0 = (char)(ch0 - 32);
+        char init[2] = { ch0, 0 };
+        r->drawTextLine(tl.x + (tl.w - r->textWidth(init, 1.6f)) * 0.5f, ui.textCenterY(tl, 1.6f),
+                        init, { 0.94f, 0.97f, 1.0f }, 1, 1.6f);
+
+        float tx = rc.x + 69;
+        r->drawTextLine(tx, rc.y + 14, p.name,
+                        exists ? Vec3{ 0.91f, 0.95f, 1.0f } : Vec3{ 0.93f, 0.58f, 0.58f }, 1, 1.2f);
+        std::string sub = ui.ellipsize(exists ? p.path : (p.path + "   (folder not found)"), cardW - 200);
+        r->drawTextLine(tx, rc.y + 39, sub, { 0.50f, 0.56f, 0.65f }, 1, 0.88f);
+
+        // Il suggerimento e la crocetta compaiono solo passandoci sopra: sono
+        // due cose in meno da guardare quando si sta solo cercando un nome.
+        if (over) {
+            if (exists) {
+                const char* hint = "OPEN";
+                r->drawTextLine(xr.x - 16 - r->textWidth(hint, 0.9f), ui.textCenterY(rc, 0.9f),
+                                hint, ACCENT, 0.95f, 0.9f);
+            }
+            r->drawRectPx(xr.x, xr.y, xr.w, xr.h,
+                          overX ? Vec3{ 0.42f, 0.17f, 0.17f } : Vec3{ 0.17f, 0.19f, 0.23f }, 1);
+            chamfer(xr, 4, rowBg);
+            Vec3 xc = overX ? Vec3{ 1.0f, 0.72f, 0.72f } : Vec3{ 0.58f, 0.63f, 0.71f };
+            float mx = xr.x + xr.w * 0.5f, my = xr.y + xr.h * 0.5f;
+            r->drawLinePx(mx - 5, my - 5, mx + 5, my + 5, 1.6f, xc, 1);
+            r->drawLinePx(mx + 5, my - 5, mx - 5, my + 5, 1.6f, xc, 1);
+        }
+
         if (in.mousePressed && overX) removeReq = i;
         else if (in.mousePressed && over && exists) openReq = i;
     }
     r->setUIScissor(0, 0, 0, 0, false);
+
+    // Barra di scorrimento, fuori dalla scheda per non rubarle larghezza.
+    // Compare solo quando c'e' davvero qualcosa sotto il bordo.
+    float viewH = listBot - listTop;
+    if (contentH > viewH && minScroll < 0) {
+        float thumbH = viewH * (viewH / contentH);
+        if (thumbH < 30) thumbH = 30;
+        float t = g.hubScroll / minScroll;   // 0 in cima, 1 in fondo
+        r->drawRectPx(cx + cardW + 9, listTop, 4, viewH, { 0.125f, 0.142f, 0.172f }, 1);
+        r->drawRectPx(cx + cardW + 9, listTop + (viewH - thumbH) * t, 4, thumbH, { 0.28f, 0.33f, 0.41f }, 1);
+    }
 
     // defer actions until after the layout pass (they mutate g.hubProjects)
     if (doLiveJoin) g.liveWindowOpen = true;
@@ -11011,6 +11528,7 @@ static void createNativeWindow(const std::string& dockId, const std::string& tit
         cls.lpfnWndProc = PanelWndProc;
         cls.hInstance = hInst;
         cls.hCursor = LoadCursorA(nullptr, (LPCSTR)IDC_ARROW);
+        cls.hIcon = LoadIconA(hInst, MAKEINTRESOURCEA(1));
         cls.lpszClassName = "PulsePanel";
         RegisterClassA(&cls);
         classDone = true;
@@ -11149,6 +11667,11 @@ static bool createGLWindow(HINSTANCE hInst, bool visible) {
     cls.lpfnWndProc = WndProc;
     cls.hInstance = hInst;
     cls.hCursor = LoadCursorA(nullptr, (LPCSTR)IDC_ARROW);
+    // Il numero e' l'identificatore della risorsa dichiarata in icon.rc.
+    // Senza questa riga la struttura resta azzerata e Windows ripiega
+    // sull'icona generica: quella incorporata nell'eseguibile si vede in
+    // Esplora risorse, ma non sulla finestra ne' sulla barra delle applicazioni.
+    cls.hIcon = LoadIconA(hInst, MAKEINTRESOURCEA(1));
     cls.lpszClassName = "PulseEngine";
     RegisterClassA(&cls);
 
@@ -14461,6 +14984,65 @@ static int runTests() {
         if (!ok) failures++;
     }
 
+    {
+        // Le due funzioni pure della finestra Asset Manager: il nome con cui un
+        // file entra nel progetto e il filtro della ricerca. Sono le uniche del
+        // pannello che si possono provare senza una finestra aperta.
+        bool ok = assetLibrarySafeName("Torre medievale") == "Torre medievale" &&
+                  assetLibrarySafeName("mattone/rosso") == "mattone_rosso" &&
+                  assetLibrarySafeName("citt\xC3\xA0") == "citt" &&   // 'a' accentata: due byte fuori dall'ASCII
+                  assetLibrarySafeName("///") == "asset";
+
+        A3DAsset probe;
+        probe.name = "Torre medievale";
+        probe.kind = A3D_MODEL;
+        probe.tags = { "medievale", "pietra" };
+        probe.haystack = "torre medievale medievale pietra ";
+
+        const std::string savedTag = g.assetLibTag;
+        const int savedKind = g.assetLibKind;
+        g.assetLibKind = -1;
+        g.assetLibTag.clear();
+
+        snprintf(g.assetLibSearch, sizeof(g.assetLibSearch), "torre pietra");
+        ok = ok && assetLibraryMatches(probe);      // nome e tag: entrambe le parole ci sono
+        snprintf(g.assetLibSearch, sizeof(g.assetLibSearch), "torre legno");
+        ok = ok && !assetLibraryMatches(probe);     // una manca, e l'AND e' implicito
+        g.assetLibSearch[0] = '\0';
+        g.assetLibKind = A3D_SOUND;
+        ok = ok && !assetLibraryMatches(probe);     // tipo diverso
+        g.assetLibKind = -1;
+        g.assetLibTag = "MEDIEVALE";
+        ok = ok && assetLibraryMatches(probe);      // il tag non guarda le maiuscole
+        g.assetLibTag = "gotico";
+        ok = ok && !assetLibraryMatches(probe);
+
+        g.assetLibSearch[0] = '\0';
+        g.assetLibTag = savedTag;
+        g.assetLibKind = savedKind;
+        report("Asset Manager import names and search filter", ok,
+               ok ? "safe names, implicit AND, kind and tag filters ok" : "name or filter mismatch");
+        if (!ok) failures++;
+    }
+    {
+        // Lettura vera del catalogo di Pulse Asset Manager, se su questa macchina
+        // c'e'. Non averlo non e' un fallimento: e' un programma a parte, e
+        // l'editor deve saperne fare a meno senza lamentarsi.
+        AssetLibrary lib;
+        if (!lib.refresh()) {
+            report("Asset Manager library read", true, lib.error.c_str());
+        } else {
+            int files = 0;
+            for (const A3DAsset& a : lib.assets)
+                for (const A3DVariant& v : a.variants) files += (int)v.files.size();
+            bool ok = !lib.root.empty();
+            snprintf(detail, sizeof(detail), "%d assets, %d files, root %s", (int)lib.assets.size(), files,
+                     ok ? "resolved" : "MISSING");
+            report("Asset Manager library read", ok, detail);
+            if (!ok) failures++;
+        }
+    }
+
     char summary[128];
     snprintf(summary, sizeof(summary), "\n%s - %d tests failed\n", failures ? "SOME TESTS FAILED" : "ALL TESTS PASSED", failures);
     printf("%s", summary);
@@ -14493,12 +15075,19 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     }
     bool testMode = false, shotMode = false;
     int shotDemo = 1;
+    // Progetto da aprire subito, saltando l'hub. Serve a chi ci arriva da un
+    // programma esterno che l'hub lo ha gia' mostrato per conto suo: aprire il
+    // nostro sopra al suo vorrebbe dire farlo scegliere due volte.
+    const char* startupProject = nullptr;
+    const char* startupLevel = nullptr;
     for (int i = 1; i < __argc; i++) {
         if (strcmp(__argv[i], "--test") == 0) testMode = true;
         else if (strcmp(__argv[i], "--screenshot") == 0) {
             shotMode = true;
             if (i + 1 < __argc) shotDemo = atoi(__argv[i + 1]);
         }
+        else if (strcmp(__argv[i], "--project") == 0 && i + 1 < __argc) startupProject = __argv[++i];
+        else if (strcmp(__argv[i], "--level") == 0 && i + 1 < __argc) startupLevel = __argv[++i];
     }
 
     initDirs();
@@ -14524,6 +15113,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     g.dock.addWindow("dettagli", "Details", DOCK_RIGHT, 0);
     g.dock.addWindow("log", "Log", DOCK_BOTTOM, 0);
     g.dock.addWindow("contenuti", "Content", DOCK_BOTTOM, 1);
+    // La libreria di Pulse Asset Manager sta accanto al Content browser: si cerca
+    // di la' e si importa di qua, e le due cose vanno guardate insieme.
+    g.dock.addWindow("assetlib", "Asset Manager", DOCK_BOTTOM, 2);
     g.dock.addWindow("navigation", "Navigation", DOCK_BOTTOM, 3);
     g.dock.addWindow("animation", "Animation", DOCK_BOTTOM, 4);
     g.dock.addWindow("animator", "Animator Controller", DOCK_BOTTOM, 5);
@@ -14654,6 +15246,17 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         std::string title = g.projectName + " - Pulse Engine";
         SetWindowTextA(g.hwnd, title.c_str());
         play();
+    } else if (startupProject && *startupProject) {
+        // openProjectAt fa tutto il resto, compreso uscire dall'hub e
+        // registrare il progetto fra i recenti: e' la stessa strada che
+        // percorre un clic nell'hub, non una scorciatoia parallela.
+        std::error_code ec;
+        if (fs::is_directory(startupProject, ec)) {
+            openProjectAt(startupProject, startupLevel ? startupLevel : "");
+        } else {
+            addLog(2, "Project folder not found: %s", startupProject);
+            g.inHub = true;
+        }
     } else {
         g.inHub = true;
     }

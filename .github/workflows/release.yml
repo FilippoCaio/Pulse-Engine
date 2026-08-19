@@ -75,6 +75,37 @@ jobs:
           Write-Host "Pacchetto: $name.zip ($size MB)"
           Write-Host "SHA256:    $hash"
 
+# Il manifesto che l'applicazione installata va a leggere per sapere se
+      # e' vecchia, piu' l'eseguibile nudo a cui punta.
+      #
+      # Nudo e non dentro allo zip, e nemmeno l'installer: l'aggiornatore
+      # scarica un file solo, ne verifica l'impronta, e quel file si copia
+      # sopra il programma in uso. Un archivio non saprebbe scompattarlo e un
+      # installer si sostituirebbe all'applicazione.
+      - name: Manifesto per l'aggiornamento automatico
+        shell: pwsh
+        run: |
+          $version = '${{ steps.ver.outputs.version }}'
+          $name    = '${{ steps.ver.outputs.name }}'
+
+          $exe = Get-ChildItem "dist/$name" -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { throw "Nessun eseguibile in dist/$name" }
+          Copy-Item $exe.FullName "dist/$($exe.Name)" -Force
+
+          $hash = (Get-FileHash "dist/$($exe.Name)" -Algorithm SHA256).Hash.ToLower()
+          $manifesto = [ordered]@{
+            version = $version
+            url     = "https://github.com/${{ github.repository }}/releases/download/v$version/$($exe.Name)"
+            sha256  = $hash
+            notes   = ''
+          }
+          # Senza BOM: dall'altra parte c'e' un parser scritto a mano, e tre
+          # byte invisibili in testa lo farebbero fallire per sempre.
+          [IO.File]::WriteAllText("dist/PulseEngine.json",
+            ($manifesto | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+
+          Write-Host "Manifesto: PulseEngine.json -> $($exe.Name) ($hash)"
+
       - name: Pubblica la release
         shell: pwsh
         env:
@@ -93,4 +124,5 @@ jobs:
           if (-not $exists) {
             gh release create $tag --title "Pulse Engine $version" --generate-notes
           }
-          gh release upload $tag "dist/$name.zip" "dist/$name.zip.sha256" --clobber
+          $exe = (Get-ChildItem "dist/$name" -Filter *.exe | Select-Object -First 1).Name
+          gh release upload $tag "dist/$name.zip" "dist/$name.zip.sha256" "dist/$exe" "dist/PulseEngine.json" --clobber
